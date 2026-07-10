@@ -93,3 +93,25 @@ SSE + mp3 download). Branch `feature/auto-podcaster-v0.1`, committed, pushed, PR
 You test only by interacting with the running app (no terminal commands from you). I own launching
 servers. Once you try the UI, report: app loads at :3000? audio streams live? download works? I route
 on your verdict (positive -> Phase 2; negative -> delegate zero-shot-fix; won't load -> qa-auditor boot check).
+
+### User feedback on the harness (2026-07-11, during auto-podcaster test)
+
+Live signal while running `/zero-shot-build`:
+
+- [ ] **Intake still asks too many questions up front.** The multi-round `clarify` intake (5 product
+  rounds + technical) feels heavy. The user wants the harness to **ship a working server first, then
+  ask questions interactively** (via `clarify`) to refine. I.e. invert the order: build the smallest
+  runnable v1 -> serve it -> ask targeted questions about what to improve. This is a direct critique
+  of the skill's Stage-1 intake, which front-loads design decisions.
+- [ ] **"Give me a working server, then ask questions with the user tool."** Desired loop: agent
+  delivers something runnable, the user tries it, the agent asks (clarify) what to change next. This
+  is the opposite of exhaustive pre-design.
+- [ ] **"This Hermes port is nothing like the Claude Code harness, that used to ask me too many
+  questions."** The user found the original Claude Code harness question-heavy and likes that this
+  port feels different. Keep that direction: bias toward a working artifact early, fewer upfront asks.
+
+**Harness-improvement implication:** consider tuning `zero-shot-build` so intake is capped at 1–2
+rounds (just enough to pick a stack + one core path), then the build ships a runnable v1, and later
+phases are driven by the user's live reactions via `clarify` at each testing gate. Extend the
+"ask AFTER serving" principle into the build itself, not just the gate. Also: the agent should OWN
+launching a working server (not ask the user to run terminal commands) before any post-serve questions.
