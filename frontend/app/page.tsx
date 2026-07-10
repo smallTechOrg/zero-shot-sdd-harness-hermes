@@ -16,6 +16,9 @@ export default function Home() {
   const [chunkCount, setChunkCount] = useState<number>(0); // bumps on each new audio chunk
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Uint8Array[]>([]);
+  const pendingRef = useRef<Uint8Array[]>([]); // chunks waiting for MSE append
+  const sbRef = useRef<SourceBuffer | null>(null);
+  const msRef = useRef<MediaSource | null>(null);
 
   useEffect(() => {
     fetch(`${API}/api/podcast/cast`)
@@ -40,6 +43,9 @@ export default function Home() {
     if (!topic.trim()) return setError("Enter a topic first.");
     if (selected.length < 2) return setError("Select at least 2 hosts.");
 
+    // Set up a MediaSource so chunks append seamlessly (no per-chunk restart).
+    setupMediaSource();
+
     setStatus("generating");
     try {
       const res = await fetch(`${API}/api/podcast/generate`, {
@@ -56,6 +62,39 @@ export default function Home() {
     } catch (e: any) {
       setStatus("error");
       setError(e.message || "Generation failed.");
+    }
+  }
+
+  function setupMediaSource() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!window.MediaSource || !MediaSource.isTypeSupported("audio/mpeg")) {
+      // Fallback: play the completed blob once at the end (no live progressive).
+      return;
+    }
+    const ms = new MediaSource();
+    audio.src = URL.createObjectURL(ms);
+    msRef.current = ms;
+    ms.addEventListener("sourceopen", () => {
+      const sb = ms.addSourceBuffer("audio/mpeg");
+      sbRef.current = sb;
+      sb.mode = "sequence";
+      // Append buffered chunks that arrived before sourceopen.
+      flushBuffer(sb);
+      sb.addEventListener("updateend", () => flushBuffer(sb));
+    });
+  }
+
+  function flushBuffer(sb: SourceBuffer) {
+    if (!sb || sb.updating) return;
+    while (pendingRef.current.length > 0) {
+      const chunk = pendingRef.current.shift()!;
+      try {
+        sb.appendBuffer(chunk);
+        break; // appendBuffer is async; next chunk waits for updateend
+      } catch {
+        break;
+      }
     }
   }
 
@@ -79,8 +118,12 @@ export default function Home() {
         const ev = parseFrame(frame);
         if (!ev) continue;
         if (ev.event === "audio") {
-          chunksRef.current.push(base64ToBytes(ev.data));
-          setChunkCount((c) => c + 1); // trigger live-blob rebuild
+          const bytes = base64ToBytes(ev.data);
+          chunksRef.current.push(bytes);
+          pendingRef.current.push(bytes);
+          setChunkCount((c) => c + 1);
+          // Append to the MediaSource buffer if ready; else it waits in pendingRef.
+          if (sbRef.current && !sbRef.current.updating) flushBuffer(sbRef.current);
         } else if (ev.event === "done") {
           finalize(sessionId);
         } else if (ev.event === "error") {
@@ -96,17 +139,31 @@ export default function Home() {
   function finalize(sessionId: string) {
     setStatus("done");
     setDownloadUrl(`${API}/api/podcast/download/${sessionId}`);
+    // If MSE is active, close the stream once buffered chunks are flushed.
+    if (sbRef.current && window.MediaSource) {
+      const flushThenEnd = () => {
+        if (sbRef.current && !sbRef.current.updating && pendingRef.current.length === 0) {
+          try { msRef.current?.endOfStream(); } catch {}
+        } else {
+          setTimeout(flushThenEnd, 50);
+        }
+      };
+      setTimeout(flushThenEnd, 50);
+    } else if (audioRef.current && chunksRef.current.length > 0) {
+      // No MSE (e.g. Chrome lacks audio/mpeg): play the complete blob once, smoothly.
+      const blob = new Blob(chunksRef.current, { type: "audio/mpeg" });
+      audioRef.current.src = URL.createObjectURL(blob);
+      audioRef.current.play().catch(() => {});
+    }
   }
 
-  // Rebuild the live audio blob whenever new chunks arrive, so the <audio>
-  // element keeps extending instead of freezing on the first chunk.
+  // Progressive playback via MediaSource: append buffered chunks as they arrive
+  // so the audio plays smoothly (no per-chunk restart). When MSE/audio-mpeg is
+  // unsupported, finalize() plays the whole blob once (smooth, not live).
   useEffect(() => {
-    if (chunksRef.current.length === 0 || !audioRef.current) return;
-    const blob = new Blob(chunksRef.current, { type: "audio/mpeg" });
-    const url = URL.createObjectURL(blob);
-    audioRef.current.src = url;
-    audioRef.current.play().catch(() => {}); // autoplay as it grows
-    return () => URL.revokeObjectURL(url);
+    if (chunkCount === 0) return;
+    const sb = sbRef.current;
+    if (sb && !sb.updating) flushBuffer(sb);
   }, [chunkCount]);
 
   return (
