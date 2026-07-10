@@ -88,6 +88,15 @@ SSE + mp3 download). Branch `feature/auto-podcaster-v0.1`, committed, pushed, PR
 - [ ] **Frontend not yet browser-tested by the human** (the actual gate). Backend+tests green;
   the Next.js play path is the gated step the user runs.
 
+- [ ] **Live audio streaming has a browser-constraint tradeoff (learned 2026-07-11).**
+  edge-tts emits ADTS MP3 frames. `MediaSource.isTypeSupported("audio/mpeg")` is `false` in
+  Chrome (MSE accepts aac/mp4/webm, not raw mp3). So the "seamless live append" MSE path falls
+  back to playing the COMPLETE blob once at `done` — smooth, no reset, but NOT byte-live.
+  Two resets of the player happened during the test (per-chunk `play()`), fixed by (a) dropping
+  per-chunk play, (b) MSE append where supported, (c) whole-blob play otherwise.
+  **Phase-2 upgrade:** transcode MP3 chunks to a container MSE accepts (webm/opus via ffmpeg.wasm,
+  or pipe via a real streaming muxer) to get true live progressive playback in Chrome. Track this.
+
 ### Human testing gate (current)
 
 You test only by interacting with the running app (no terminal commands from you). I own launching
