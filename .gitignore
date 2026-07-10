@@ -17,6 +17,9 @@ node_modules/
 .next/
 dist/
 build/
+frontend/next-env.d.ts
+frontend/package-lock.json
+*.tsbuildinfo
 
 # DB
 *.db
