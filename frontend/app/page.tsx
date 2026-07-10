@@ -13,7 +13,7 @@ export default function Home() {
   const [status, setStatus] = useState<"idle" | "generating" | "done" | "error">("idle");
   const [error, setError] = useState<string>("");
   const [downloadUrl, setDownloadUrl] = useState<string>("");
-  const [audioUrl, setAudioUrl] = useState<string>("");
+  const [chunkCount, setChunkCount] = useState<number>(0); // bumps on each new audio chunk
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Uint8Array[]>([]);
 
@@ -35,8 +35,8 @@ export default function Home() {
   async function generate() {
     setError("");
     setDownloadUrl("");
-    setAudioUrl("");
     chunksRef.current = [];
+    setChunkCount(0);
     if (!topic.trim()) return setError("Enter a topic first.");
     if (selected.length < 2) return setError("Select at least 2 hosts.");
 
@@ -67,7 +67,6 @@ export default function Home() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buf = "";
-    let gotAudio = false;
 
     while (true) {
       const { value, done } = await reader.read();
@@ -80,12 +79,8 @@ export default function Home() {
         const ev = parseFrame(frame);
         if (!ev) continue;
         if (ev.event === "audio") {
-          const bytes = base64ToBytes(ev.data);
-          chunksRef.current.push(bytes);
-          if (!gotAudio) {
-            gotAudio = true;
-            playChunks();
-          }
+          chunksRef.current.push(base64ToBytes(ev.data));
+          setChunkCount((c) => c + 1); // trigger live-blob rebuild
         } else if (ev.event === "done") {
           finalize(sessionId);
         } else if (ev.event === "error") {
@@ -98,26 +93,21 @@ export default function Home() {
     if (status === "generating") finalize(sessionId);
   }
 
-  function playChunks() {
-    const blob = new Blob(chunksRef.current, { type: "audio/mpeg" });
-    const url = URL.createObjectURL(blob);
-    setAudioUrl(url);
-    // Keep updating the blob as more chunks arrive.
-    if (audioRef.current) audioRef.current.src = url;
-  }
-
   function finalize(sessionId: string) {
     setStatus("done");
     setDownloadUrl(`${API}/api/podcast/download/${sessionId}`);
   }
 
-  // Keep the live <audio> fed as chunks grow.
+  // Rebuild the live audio blob whenever new chunks arrive, so the <audio>
+  // element keeps extending instead of freezing on the first chunk.
   useEffect(() => {
-    if (chunksRef.current.length && audioRef.current && !audioRef.current.src) {
-      const blob = new Blob(chunksRef.current, { type: "audio/mpeg" });
-      audioRef.current.src = URL.createObjectURL(blob);
-    }
-  });
+    if (chunksRef.current.length === 0 || !audioRef.current) return;
+    const blob = new Blob(chunksRef.current, { type: "audio/mpeg" });
+    const url = URL.createObjectURL(blob);
+    audioRef.current.src = url;
+    audioRef.current.play().catch(() => {}); // autoplay as it grows
+    return () => URL.revokeObjectURL(url);
+  }, [chunkCount]);
 
   return (
     <main style={{ maxWidth: 720, margin: "40px auto", padding: "0 16px" }}>
@@ -165,7 +155,7 @@ export default function Home() {
         {error}
       </div>
 
-      {(audioUrl || chunksRef.current.length > 0) && (
+      {(chunkCount > 0) && (
         <audio ref={audioRef} controls autoPlay style={{ width: "100%", marginTop: 16 }} />
       )}
 
