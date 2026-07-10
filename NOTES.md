@@ -114,6 +114,16 @@ SSE + mp3 download). Branch `feature/auto-podcaster-v0.1`, committed, pushed, PR
   - NOTE: Gemini quota kept tripping during verification, so the *naturalness* of the new prompt was NOT
     verified by a live run — gated on the user's browser test (quota was reset on their side).
 
+- [x] **CRITICAL cost fix: 1 Gemini call per episode, not per line (2026-07-11).**
+  Root cause of the *monthly spend cap* exhaustion: `stream_turns` called Gemini once PER LINE
+  (~12–24 calls/episode). Rewrote `dialogue.py` to ask Gemini for the WHOLE script in ONE call, then
+  parse + yield lines (streaming/TTS still per-line). `prompts.py`: `build_script_prompt` replaces the
+  per-turn pair. `stream.py`: accumulate a turn's full mp3 before ffmpeg transcode (partial edge-tts
+  fragments aren't valid mp3; a whole turn is) -> one valid webm segment per turn. Verified: 1 Gemini
+  call -> 12 turns, 12 webm events, 0 errors, valid webm. This makes a podcast cost ~1 Gemini call.
+  **Harness lesson:** never loop an LLM call per output token/line in a streaming build; batch the
+  generation. Log this as a pattern in harness/patterns/agentic-ai or code.md.
+
 ### Human testing gate (current)
 
 You test only by interacting with the running app (no terminal commands from you). I own launching
