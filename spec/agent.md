@@ -1,218 +1,190 @@
-# Agent
+# Agent — Auto-Podcaster
 
-> Required when the project uses an agent framework. Delete this file if your project has no agent framework.
->
-> If your project has no agent framework (e.g., a simple script or single-LLM API call), delete this file.
->
-
----
+> This project uses **no agent framework**. The "agent" is a deterministic, linear three-node
+> pipeline orchestrated by the FastAPI API layer. `spec/agent.md` is filled for completeness of the
+> spec discipline (the documented agent graph), but the implementation is a plain Python pipeline,
+> not a LangGraph/Supervisor graph.
 
 ## Agent Architecture Pattern
 
-<!-- FILL IN: Which pattern does this agent follow? Choose one and describe why. -->
+**Chosen:** Linear pipeline (Single-agent loop equivalent, no branching). Rationale: the
+conversation is generated strictly turn-by-turn in speaker order; there are no conditional edges,
+checkpoints, or parallel sub-agents. A graph framework would be gold-plating.
 
 | Pattern | Use when |
 |---------|----------|
-| **Single-agent loop** | One LLM drives a deterministic tool-call loop. No branches, no handoffs. |
+| **Single-agent loop** | One LLM drives a deterministic tool-call loop. No branches, no handoffs. ✅ chosen |
 | **Graph (LangGraph)** | Multi-step pipeline with conditional edges, checkpointing, or parallel nodes. |
 | **Multi-agent** | Specialised sub-agents with distinct roles; orchestrator routes between them. |
 | **Supervisor** | One supervisor LLM dispatches to worker agents based on task type. |
-| **Human-in-the-loop** | Execution pauses at defined checkpoints for user review or approval. |
-
-**Chosen:** <!-- state pattern + one-sentence rationale -->
 
 ---
 
 ## LLM Provider & Model
 
-<!-- FILL IN: Which model drives each agent/node? State provider, model ID, and why. -->
-
 | Agent / Node | Provider | Model ID | Rationale |
 |-------------|----------|----------|-----------|
-| <!-- node --> | Anthropic | <!-- e.g. claude-sonnet-4-6 --> | <!-- latency vs. quality trade-off --> |
+| `dialogue-generator` | Google Gemini | `models/gemini-2.5-flash` | Fast, cheap, available for the repo key; good conversational naturalness. |
 
-**Fallback behaviour:** <!-- Production resilience only: retry/backoff, degraded mode, or a surfaced error if the LLM API is unavailable or rate-limited. NOT a test/offline stub path — tests call the real API with keys from `.env`. -->
+**Fallback behaviour:** None on the tested path. If Gemini returns an error (auth, rate limit,
+network), the SSE stream emits an `error` event and the session is marked `failed`. We surface the
+real failure — no offline stub.
 
-**Prompt strategy:** <!-- System/user split, few-shot examples, structured output (tool_use / JSON mode)? -->
+**Prompt strategy:** System prompt sets the cast (names + personas) and the topic + turn order; the
+user turn requests **one** next speaker line at a time (low `max_output_tokens`), so we can stream
+each line to TTS as soon as it arrives. Structured output: plain text per turn (one line per
+response), parsed by a small delimiter contract (see `spec/api.md` dialogue format).
 
 ---
 
 ## Tools & Tool Calling
 
-<!-- FILL IN: Every tool the agent can call. -->
+No tool calling. The only external operations are the Gemini generate call and the edge-tts
+`Communicate.stream()` call.
 
 | Tool name | Description | Inputs | Output | Side-effects |
 |-----------|-------------|--------|--------|--------------|
-| <!-- name --> | <!-- what it does --> | <!-- params --> | <!-- return type --> | <!-- DB write, API call, file write, etc. --> |
-
-**Tool selection strategy:** <!-- How does the agent decide which tool to call? (LLM choice, rule-based routing, forced single tool) -->
-
-**Tool failure handling:** <!-- retry, fallback, abort — per tool or global policy? -->
+| (none) | The pipeline calls Gemini + edge-tts directly; no LLM tool use. | | | |
 
 ---
 
 ## Agent State
 
-<!-- FILL IN: The full state type. Every field must be named, typed, and annotated with what populates it. -->
-
 ```python
-class AgentState(TypedDict):
-    # Identity
-    run_id: int                          # set at initialisation
-
-    # Input
-    # ...                                # fields populated from the trigger
-
-    # Pipeline data (populated progressively by nodes)
-    # ...
-
-    # Output
-    # ...                                # final result fields
-
-    # Control
-    error: str | None                    # set by any node on fatal failure
-    checkpoint: str | None              # last completed node (for resume)
+class PodcastRun:
+    session_id: str          # UUID, set at generate time
+    topic: str               # from request
+    hosts: list[Host]        # selected personas (name, voice, persona)
+    turns: list[Turn]        # accumulated (speaker, text) as produced
+    audio_path: str | None   # final mp3 path, set on completion
+    status: str              # generating | done | failed
 ```
 
 ---
 
 ## Nodes / Steps
 
-<!-- FILL IN: One section per node. For single-agent loops, describe each "step" or "tool call phase." -->
+### `dialogue-generator`
 
-### `node_[name]`
-
-**Reads from state:** <!-- field names -->
-
-**Writes to state:** <!-- field names -->
-
-**LLM call:** <!-- yes/no; if yes: prompt template summary, model used, output format -->
-
+**Reads:** `topic`, `hosts`, conversation-so-far (`turns`).
+**Writes:** one `Turn` (speaker + text) per call.
+**LLM call:** yes — Gemini, one next line per request, `max_output_tokens` small (~220).
 **External calls:**
 
 | System | Operation | On Failure |
 |--------|-----------|------------|
-| <!-- system --> | <!-- what it calls --> | <!-- fatal (set error) / partial (log + continue) / retry --> |
+| Gemini | `generate_content` | fatal → SSE `error` event, session `failed` |
 
-**Behaviour:** <!-- One paragraph. What decision or transformation does this node perform? -->
+**Behaviour:** Maintains a running transcript. Each call asks Gemini for the next speaker + line,
+alternating hosts, keeping the conversation coherent and on-topic. Stops after a configured number
+of turns (`MAX_TURNS`, default 12) or when Gemini emits an explicit `[END]` marker.
+
+### `tts`
+
+**Reads:** a `Turn` (speaker + text).
+**Writes:** raw audio bytes (mp3 container via edge-tts's native mp3 stream).
+**LLM call:** no.
+**External calls:**
+
+| System | Operation | On Failure |
+|--------|-----------|------------|
+| edge-tts | `Communicate(text, voice).stream()` | fatal → SSE `error` event, session `failed` |
+
+**Behaviour:** Maps the speaker to their assigned edge-tts voice, streams audio bytes. Distinct
+voice per host.
+
+### `streamer`
+
+**Reads:** audio bytes from `tts`.
+**Writes:** SSE `audio` event per chunk; appends bytes to the session's output file.
+**LLM call:** no.
+**External calls:**
+
+| System | Operation | On Failure |
+|--------|-----------|------------|
+| SQLite | update session status / path | logged; session `failed` |
+
+**Behaviour:** Emits `data: {json audio chunk ref}` over SSE; on stream end emits a `done` event
+with the download URL and flips session status to `done`.
 
 ---
 
 ## Graph / Flow Topology
 
-<!-- FILL IN: ASCII diagram of node flow. Show ALL conditional edges explicitly. -->
-
-```
-START
+```text
+START (generate request)
   │
   ▼
-node_a ──(error)──► node_handle_error ──► END
-  │
-  ▼
-node_b ──(condition)──► node_c
-  │                         │
-  │                         ▼
-  └──────────────────► node_finalize
-                             │
-                             ▼
-                            END
+dialogue-generator ──► tts ──► streamer ──(loop until MAX_TURNS or [END])
+                                      │
+                                      ▼
+                                   done (mp3 saved, session=done)
 ```
 
-**Conditional edges:**
-
-| Source node | Condition | Target |
-|-------------|-----------|--------|
-| <!-- node --> | <!-- e.g. state["error"] is not None --> | <!-- target node --> |
+**Conditional edges:** none (linear). Loop termination = `MAX_TURNS` reached OR Gemini returns
+`[END]`.
 
 ---
 
 ## Memory & Context
 
-<!-- FILL IN: How does the agent remember things across turns, steps, or runs? -->
-
 | Scope | Mechanism | What is stored |
 |-------|-----------|----------------|
-| **Within a run** | LangGraph state | All in-progress data |
-| **Across runs** | <!-- DB / vector store / none --> | <!-- e.g. past results, user prefs --> |
-| **Conversation** | <!-- message history / summary / none --> | <!-- if chat-style --> |
+| Within a run | in-process `PodcastRun` object | transcript-so-far, audio buffer |
+| Across runs | SQLite | finished sessions + audio paths (no cross-run learning) |
+| Conversation | the running `turns` list | current episode script |
 
-**Context window management:** <!-- How is the prompt kept within limits? (summary, sliding window, RAG retrieval) -->
+**Context window management:** Only the recent transcript is sent back to Gemini each turn
+(sliding window capped at `MAX_TURNS`), keeping the prompt bounded.
 
 ---
 
 ## Human-in-the-Loop Checkpoints
 
-<!-- FILL IN: Where does execution pause for human input? Delete section if not applicable. -->
-
-| Checkpoint | What is shown to the user | Expected user action | Timeout / default |
-|------------|--------------------------|----------------------|-------------------|
-| <!-- name --> | <!-- what the agent surfaces --> | <!-- approve / edit / abort --> | <!-- timeout action --> |
+None in v1 (one-shot generate).
 
 ---
 
 ## Error Handling & Recovery
 
-<!-- FILL IN: How the agent handles failures at each level. -->
+**Node-level:** each node catches its own exceptions; fatal errors emit an SSE `error` event and set
+session status `failed`. No silent degradation on the tested path.
 
-**Node-level:** <!-- Each node catches its own exceptions; fatal errors set state["error"] and route to handle_error node. -->
+**Resume / retry strategy:** none in v1 — a failed run is restarted by the user.
 
-**Graph-level (handle_error node):**
-- Reads: `state.error`, `state.run_id`
-- Updates DB: run status → "failed", `error_message`, `completed_at`
-- Logs error with `run_id` context
-- Terminates graph
-
-**Resume / retry strategy:** <!-- Can a failed run be resumed from its last checkpoint? How? -->
-
-**Partial failure:** <!-- If a non-critical step fails, does the agent degrade gracefully or abort? -->
+**Partial failure:** if TTS fails mid-episode, the partial audio file is kept and the session is
+marked `failed` with an error message surfaced to the UI.
 
 ---
 
 ## Observability
 
-<!-- FILL IN: What is logged, traced, and measured? -->
-
 | Signal | What | Where |
 |--------|------|-------|
-| **Trace** | One trace per run, one span per node | <!-- OpenTelemetry / LangSmith / stdout --> |
-| **LLM calls** | Prompt tokens, completion tokens, latency, model | <!-- LangSmith / structured log --> |
-| **Tool calls** | Tool name, inputs, success/error, latency | Structured log |
-| **Run outcome** | Status, total duration, error if any | DB + structured log |
+| Run outcome | status, turns, audio bytes, error | SQLite + stdout structured log |
+| LLM calls | model, prompt tokens, latency | structured log (presence only; no key) |
+| TTS calls | voice, bytes | structured log |
 
 ---
 
 ## Concurrency Model
 
-<!-- FILL IN: How concurrent agent runs are handled. -->
-
-- **Run isolation:** <!-- one-at-a-time (API returns 409) / queue / parallel with run_id scoping -->
-- **Parallel nodes within a run:** <!-- which nodes run in parallel and why -->
-- **Checkpointing:** <!-- none / SqliteSaver / PostgresSaver — required if human-in-the-loop or long-running -->
+- **Run isolation:** single user, one active generation at a time is expected; the API does not
+  enforce a queue but concurrent runs each get their own `session_id` + file.
+- **Parallel nodes within a run:** none — strictly sequential (dialogue → tts → stream) so audio
+  order matches the conversation.
+- **Checkpointing:** none (SQLite row per session is the only durable state).
 
 ---
 
-## Graph Assembly (`agent/graph.py`)
-
-<!-- FILL IN: Pseudocode showing how nodes and edges are wired. Must be ≤ 60 lines in the real file. -->
+## Pipeline Assembly (`src/graph/stream.py`)
 
 ```python
-graph = StateGraph(AgentState)
-
-graph.add_node("node_a", node_a)
-graph.add_node("node_b", node_b)
-graph.add_node("finalize", node_finalize)
-graph.add_node("handle_error", node_handle_error)
-
-graph.set_entry_point("node_a")
-
-graph.add_conditional_edges(
-    "node_a",
-    lambda s: "handle_error" if s.get("error") else "node_b",
-)
-
-graph.add_edge("node_b", "finalize")
-graph.add_edge("finalize", END)
-graph.add_edge("handle_error", END)
-
-compiled_graph = graph.compile()
+async def run_pipeline(session, topic, hosts):
+    async for turn in dialogue.stream_turns(topic, hosts):
+        session.turns.append(turn)
+        async for chunk in tts.synthesize(turn):
+            yield sse_audio(chunk)
+            write_to_file(session.audio_path, chunk)
+    finalize(session)  # status=done, emit done event
 ```

@@ -27,3 +27,6 @@ data/
 # Logs / OS
 *.log
 .DS_Store
+
+# Ad-hoc probe scripts (never committed)
+.probe_*.py

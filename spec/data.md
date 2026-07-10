@@ -1,34 +1,40 @@
-# Data Model
-
-> Fill in this section — see comments below.
-
----
+# Data Model — Auto-Podcaster
 
 ## Storage Technology
 
-<!-- FILL IN: What database/storage does this project use and why? -->
+SQLite (local, single-user). One table is sufficient for Phase 1. File at
+`<project-root>/data/podcasts.db` (gitignored). Chosen because the app is explicitly local/single-user
+(see `harness/patterns/tech-stack.md` — SQLite only for explicitly local/single-user).
 
 ## Entities
 
-<!-- FILL IN: One section per major entity. -->
+### Entity: session
 
-### Entity: <!-- Name -->
-
-<!-- FILL IN: What does this entity represent? -->
+One podcast generation run.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| id | <!-- type --> | yes | Primary key |
-| <!-- field --> | <!-- type --> | <!-- yes/no --> | <!-- description --> |
+| id | TEXT (UUID) | yes | Primary key. |
+| topic | TEXT | yes | The one-line topic the user entered. |
+| hosts | TEXT (JSON) | yes | JSON array of selected host ids (2–3). |
+| status | TEXT | yes | `generating` \| `done` \| `failed`. |
+| audio_path | TEXT | no | Absolute path to the finished mp3 (set when `done`). |
+| error | TEXT | no | Error message if `failed`. |
+| created_at | TEXT (ISO8601) | yes | Generation start time. |
+| updated_at | TEXT (ISO8601) | yes | Last status change. |
 
 ### Relationships
 
-<!-- FILL IN: How do entities relate to each other? -->
+None (single table in Phase 1).
 
 ## Data Lifecycle
 
-<!-- FILL IN: When is data created, updated, and deleted? Is anything time-boxed or archived? -->
+- Created on `POST /api/podcast/generate` with status `generating`.
+- Updated to `done` (with `audio_path`) or `failed` (with `error`) as the pipeline finishes.
+- Audio file written to `data/` as chunks arrive; finalized on `done`.
+- No deletion in v1 (Phase 5 may add retention/cleanup).
 
 ## Sensitive Data
 
-<!-- FILL IN: What fields contain PII or secrets? How are they protected? -->
+- `AGENT_GEMINI_API_KEY` is **never** stored in SQLite or anywhere in the app DB. It lives only in
+  repo-root `.env`, loaded at startup. No PII is collected (single-user, local).

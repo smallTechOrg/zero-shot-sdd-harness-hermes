@@ -1,0 +1,8 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+google-generativeai>=0.8
+edge-tts>=6.1
+python-dotenv>=1.0
+pydantic>=2.6
+httpx>=0.27
+pytest>=8.0

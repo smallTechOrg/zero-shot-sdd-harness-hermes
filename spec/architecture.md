@@ -1,68 +1,84 @@
-# Architecture
-
-> Fill in this section — see comments below.
-
----
+# Architecture — Auto-Podcaster
 
 ## System Overview
 
-<!-- FILL IN: One paragraph describing the system at a high level. Who/what interacts with it? -->
+Auto-Podcaster is a single-user web app: the browser is the only client. A FastAPI backend owns the
+whole generation pipeline (dialogue → TTS → streaming) and persistence; a Next.js frontend is a thin
+client that posts a Generate request and plays the resulting SSE audio stream live, then offers a
+download. There is no agent framework — the "agent" is a deterministic three-node pipeline
+(dialogue-generator → TTS → streamer) orchestrated by the API layer.
 
 ## Component Map
 
-<!-- FILL IN: List the major components and what each does. -->
-
-```
-[Component A]
-    ↓
-[Component B]   ←→   [External Service]
-    ↓
-[Component C]
+```text
+[Browser / Next.js]
+    │  POST /api/podcast/generate {topic, hosts}
+    │  GET  /api/podcast/stream/<id>  (text/event-stream)
+    ▼
+[FastAPI app]
+    │
+    ├─ dialogue-generator (Gemini) ──► turn list (speaker, text)
+    ├─ TTS (edge-tts)            ──► per-line audio bytes
+    ├─ streamer                  ──► SSE audio chunks + final mp3
+    │
+    └─ SQLite (session + file path)
 ```
 
 ## Layers
 
-<!-- FILL IN: Describe the layers of the system (e.g., API → Agent Loop → Tools → Storage). -->
-
 | Layer | Responsibility |
 |-------|----------------|
-| <!-- layer --> | <!-- responsibility --> |
+| API | Accept generate requests, create session rows, expose SSE stream + health + download. |
+| Dialogue | Call Gemini turn-by-turn to produce a coherent multi-host script. |
+| TTS | Convert each script line to audio via edge-tts (distinct voice per host). |
+| Stream | Emit audio chunks over SSE as synthesized; persist full audio to a file. |
+| Storage | SQLite: sessions table (id, topic, hosts, status, audio_path, created_at). |
 
 ## Data Flow
 
-<!-- FILL IN: Walk through the main data flow from trigger to output. -->
-
-1. Trigger: <!-- how does the agent start? (cron, webhook, user input, etc.) -->
-2. <!-- step 2 -->
-3. <!-- step 3 -->
-4. Output: <!-- what does the agent produce? -->
+1. Trigger: user submits topic + selected host personas from the frontend.
+2. Backend creates a session row (status `generating`) and returns `session_id`.
+3. Frontend opens the SSE stream for that `session_id`.
+4. Dialogue-generator yields turns (speaker + line) one at a time from Gemini.
+5. TTS node converts each line to audio bytes (host-specific voice) and the streamer emits an SSE
+   `audio` event with the chunk.
+6. Chunks are also appended to a file; on completion the file is finalized (mp3) and the session
+   status flips to `done` with the `audio_path`.
+7. Frontend plays chunks live; on the `done` event it reveals the download link.
 
 ## External Dependencies
 
-<!-- FILL IN: APIs, services, databases the agent depends on. -->
-
 | Dependency | Purpose | Failure Mode |
 |------------|---------|--------------|
-| <!-- name --> | <!-- what it does --> | <!-- what happens if it's down --> |
+| Gemini (Google Generative AI) | Dialogue generation per turn. | Surfaced as a 500 / SSE error event; session marked `failed`. No silent fallback. |
+| edge-tts (Microsoft) | Text-to-speech per host. | Surfaced as SSE error event; session marked `failed`. |
+| SQLite | Local session + file-path persistence. | App fails to start if DB file unwritable. |
 
 ## Stack
 
-> This project's concrete technology choices (captured at intake, filled by the spec-writer). The generic, every-project rules — model-naming, DB driver, dev port, test environment — live in `harness/patterns/tech-stack.md`; this section is only what **this** project picked.
-
-- **Language:** <!-- FILL IN: e.g., Python 3.12 -->
-- **Agent framework:** <!-- FILL IN: e.g., LangGraph / custom / none -->
-- **LLM provider + model:** <!-- FILL IN: e.g., Anthropic / claude-sonnet-4-6 -->
-- **Backend:** <!-- FILL IN: e.g., FastAPI / none -->
-- **Database + ORM:** <!-- FILL IN: e.g., PostgreSQL + SQLAlchemy 2.0 / none -->
-- **Frontend:** <!-- FILL IN: e.g., Next.js / none -->
-- **Dependency management:** <!-- FILL IN: e.g., uv + pyproject.toml -->
+- **Language:** Python 3.11 (backend). TypeScript / React 19 (frontend).
+- **Agent framework:** none — deterministic three-node pipeline orchestrated by the API layer.
+- **LLM provider + model:** Google Gemini, `models/gemini-2.5-flash` (verified available + working with the repo key).
+- **Backend:** FastAPI + Uvicorn, SSE via `StreamingResponse`.
+- **Database + ORM:** SQLite (local/single-user), accessed via `sqlite3` stdlib wrapper (no ORM needed for one table).
+- **Frontend:** Next.js (App Router) + React, vanilla fetch + `<audio>` for SSE.
+- **Dependency management:** pip + `requirements.txt` for backend (venv). npm for frontend.
 
 | Key library | Version | Purpose |
 |-------------|---------|---------|
-| <!-- name --> | <!-- ver --> | <!-- purpose --> |
+| `google-generativeai` | latest | Gemini dialogue generation |
+| `edge-tts` | latest | Free per-host TTS (no API key) |
+| `fastapi` / `uvicorn` | latest | HTTP + SSE server |
+| `python-dotenv` | latest | Load repo-root `.env` |
+| `pytest` | latest | Backend tests |
 
-**Avoid:** <!-- FILL IN: libraries/patterns explicitly off-limits, and why -->
+**Avoid:** paid TTS (ElevenLabs et al.) for v1; a heavy agent framework (LangGraph) — the pipeline is a simple linear flow; any ORM beyond what one table needs.
+
+> **Assumed:** Frontend uses plain `fetch` + EventSource-free manual SSE parsing (EventSource only
+> supports GET; we POST to generate then GET the stream by id). Next.js dev server on :3000, backend
+> on :8001. These are documented in `spec/ui.md` / `spec/api.md`.
 
 ## Deployment Model
 
-<!-- FILL IN: How does this run? (local script, cloud function, long-running service, etc.) -->
+Local, single-user. Backend runs as a long-lived Uvicorn process; frontend as the Next.js dev server.
+No container, no cloud, no auth. (Sharing in Phase 5 is a future, optional addition.)
