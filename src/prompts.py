@@ -62,20 +62,13 @@ STYLE — make it sound like real people talking, not a scripted panel:
 - End only when the discussion has clearly landed (a natural sign-off or wrap-up), then output exactly: [END]
 - Aim for roughly {max_turns} lines total, but end early if it feels done.
 
-OUTPUT FORMAT — exactly one line per response:
+OUTPUT FORMAT — one line per response, exactly:
   <HostName>: <the line>
+
+Write the ENTIRE conversation now (all lines, ending with [END]).
 """
 
 
-def build_system_prompt(topic: str, hosts: list[Host]) -> str:
+def build_script_prompt(topic: str, hosts: list[Host], max_turns: int) -> str:
     host_lines = "\n".join(f"- {h.name}: {h.persona}" for h in hosts)
-    return SYSTEM_PROMPT.format(
-        topic=topic, host_lines=host_lines, max_turns=config.MAX_TURNS
-    )
-
-
-USER_TURN_PROMPT = (
-    "Continue the conversation naturally. Pick whichever host should speak next "
-    "(not strictly alternating) and write their next line — short or long as fits. "
-    "Output 'Name: line', or '[END]' if the episode has naturally concluded."
-)
+    return SYSTEM_PROMPT.format(topic=topic, host_lines=host_lines, max_turns=max_turns)

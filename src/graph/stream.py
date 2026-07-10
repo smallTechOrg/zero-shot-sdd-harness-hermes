@@ -35,14 +35,16 @@ async def run_pipeline(session_id: str, topic: str, host_ids: list[str], audio_p
         with path.open("wb") as f:
             async for turn in stream_turns(topic, host_ids):
                 turn_count += 1
+                # Collect the FULL line's mp3 first (edge-tts fragments aren't
+                # individually valid mp3; a whole turn is). Then transcode once
+                # to a standalone webm segment we can append live via MSE.
+                mp3_buf = b""
                 async for chunk in synthesize_turn(turn.text, turn.speaker):
+                    mp3_buf += chunk
                     f.write(chunk)
                     total_bytes += len(chunk)
-                    # Transcode mp3 -> webm/opus so the browser can stream live via MSE
-                    # (Chrome does not support MediaSource audio/mpeg). Each webm is a
-                    # standalone segment appended in sequence mode on the client.
-                    webm = mp3_chunk_to_webm(chunk)
-                    yield _sse("audio", base64.b64encode(webm).decode("ascii"))
+                webm = mp3_chunk_to_webm(mp3_buf)
+                yield _sse("audio", base64.b64encode(webm).decode("ascii"))
 
         if turn_count == 0:
             raise DialogueError("Gemini produced no usable dialogue turns.")
