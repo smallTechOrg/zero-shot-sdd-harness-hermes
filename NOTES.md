@@ -9,11 +9,11 @@ test). Goal: capture friction so the harness itself can be improved. Not the app
 
 ### Issues found
 
-- [ ] **`.env.example` missing from harness repo.** The harness root had no `.env.example`
+- [x] **`.env.example` missing from harness repo.** The harness root had no `.env.example`
   documenting the `AGENT_*` keys the skills read (`AGENT_ANTHROPIC_API_KEY`,
   `AGENT_GEMINI_API_KEY`, `AGENT_OPENROUTER_API_KEY`). Created `harness-root/.env.example`
-  this session but it is **untracked** — needs to be committed (harness boilerplate, not app code).
-  The app scaffold also creates its own `.env.example` (expected). Two different scopes; document both.
+  this session — now committed on `feature/auto-podcaster-v0.1` (alongside the app's own `.env.example`).
+  Two different scopes; both present now.
 
 - [ ] **`clarify` with an empty answer is unhandled by the skill.** In Round 3 (voice quality)
   the user left the choice blank. The skill doesn't say what to do → I defaulted to an `Assumed:`
@@ -58,6 +58,38 @@ test). Goal: capture friction so the harness itself can be improved. Not the app
 
 ### Next
 
-- [ ] Commit harness-root `.env.example` (boilerplate) — separate small PR or fold into harness.
-- [ ] Run agent-builder Phase 1 inline; log any blocker here.
-- [ ] At the human testing gate, capture UX friction.
+- [x] Commit harness-root `.env.example` (done on feature/auto-podcaster-v0.1).
+- [x] Run agent-builder Phase 1 inline; log blockers below.
+- [ ] At the human testing gate, capture UX friction (in progress — see gate below).
+
+### Build-phase outcome (2026-07-11)
+
+**Shipped:** PR #3 `auto-podcaster v0.1 (Phase 1)` — live two-host podcast (Gemini dialogue + edge-tts
+SSE + mp3 download). Branch `feature/auto-podcaster-v0.1`, committed, pushed, PR open.
+
+**Real verification (not stubbed):**
+- `pytest tests/` -> 4 passed (real Gemini + real edge-tts, ~35s).
+- Manual e2e: generated "future of remote work" hosts maya+leo -> 839KB SSE audio streamed ->
+  real 615KB mp3 saved (MPEG ADTS layer III) -> `done` event. Backend + tests verified.
+
+**Friction discovered DURING the build (harness/code, not intake):**
+- [ ] **Background `delegate_task` returns before final commit/push/PR.** The sub-agent hit a
+  fixable import bug and ended its turn at ~95% (no commit/push/PR). Parent had to finish:
+  rename `src/graph/__init__.py` -> `dialogue.py`, fix import paths (`..config`/`..prompts`),
+  fix `TestClient.stream` usage, fix host name->id mapping, add `src/__main__.py` entrypoint,
+  then commit/push/PR. Harness should make agent-builder's "return handoff" explicitly include
+  "commit + push + open PR before returning" as a hard gate, not optional.
+- [ ] **Two Python environments caused a red-herring failure.** `.venv` (deps OK) vs the Hermes
+  agent venv (`pydantic_core` broken, no `google.generativeai`). `uvicorn` launched via background
+  terminal picked the wrong venv and failed; `pytest` had silently used `.venv`. Fix: always invoke
+  with `.venv/bin/python -m ...` explicitly. Worth a harness rule: pin the venv path in run steps.
+- [ ] **`google.generativeai` is deprecated** (warns, still works). Should migrate to `google.genai`.
+  Phase-1 blocker-free but tech-debt; log as a later-phase cleanup.
+- [ ] **Frontend not yet browser-tested by the human** (the actual gate). Backend+tests green;
+  the Next.js play path is the gated step the user runs.
+
+### Human testing gate (current)
+
+You test only by interacting with the running app (no terminal commands from you). I own launching
+servers. Once you try the UI, report: app loads at :3000? audio streams live? download works? I route
+on your verdict (positive -> Phase 2; negative -> delegate zero-shot-fix; won't load -> qa-auditor boot check).
