@@ -104,6 +104,16 @@ SSE + mp3 download). Branch `feature/auto-podcaster-v0.1`, committed, pushed, PR
   should (a) cap test generations, (b) add retry/backoff on 429, and (c) tell the user to wait for
   quota reset or use a paid key. Also: the e2e test burned the quota; consider a `--limit 1` mode.
 
+- [x] **Phase 1 fixes shipped (2026-07-11): natural conversation + live streaming.**
+  - *Natural convo:* rewrote `SYSTEM_PROMPT`/`USER_TURN_PROMPT` to drop rigid alternation, allow
+    longer reactive lines/callbacks, natural end. `dialogue.py` max_output_tokens 220->400, temp 0.8->0.9.
+  - *Live streaming:* added `src/graph/transcode.py` (ffmpeg mp3->webm/opus). `stream.py` now SSE-streams
+    webm chunks (Chrome MSE supports `audio/webm;codecs=opus`, unlike `audio/mpeg`). Frontend MSE type
+    switched to webm; blob fallback also webm. Verified end-to-end: 98 webm audio events, header 1a45dfa3.
+  - *Build hygiene:* gitignored frontend artifacts (next-env.d.ts, package-lock.json, tsconfig.tsbuildinfo).
+  - NOTE: Gemini quota kept tripping during verification, so the *naturalness* of the new prompt was NOT
+    verified by a live run — gated on the user's browser test (quota was reset on their side).
+
 ### Human testing gate (current)
 
 You test only by interacting with the running app (no terminal commands from you). I own launching
