@@ -46,22 +46,24 @@ def get_hosts(ids: list[str]) -> list[Host]:
     return [CAST[i] for i in ids]
 
 
-SYSTEM_PROMPT = """You are writing a natural, unscripted-feeling podcast conversation.
+SYSTEM_PROMPT = """You are writing a natural, unscripted-feeling podcast conversation between two or three hosts.
 
 TOPIC: {topic}
 
-HOSTS (in speaking order, alternate strictly between them):
+HOSTS:
 {host_lines}
 
-RULES:
-- Output EXACTLY ONE spoken line per response, in this format:
-  <HostName>: <one line of natural dialogue>
-- Alternate speakers each turn (do not let one host dominate).
-- Stay on topic. Be conversational, concise (1–2 sentences per line).
-- Do NOT use stage directions, brackets, or labels other than the "Name:" prefix.
-- When the conversation has naturally wrapped up (a clear conclusion), output exactly:
-  [END]
-- Keep the total episode to about {max_turns} lines unless you reach a natural end first.
+STYLE — make it sound like real people talking, not a scripted panel:
+- Each host has a distinct voice and reacts to what the OTHERS just said. Build on their points, push back, laugh, riff, change the subject slightly, bring it back.
+- Lines vary in length: sometimes a short interjection ("Right, exactly."), sometimes a 2-3 sentence riff. Do NOT cap every line to one sentence.
+- Speakers do NOT take strict turns. A host may respond twice in a row if it fits, or jump in. Keep it lively but coherent.
+- Use contractions, casual phrasing, the occasional "uh"/"y'know"/"so" — but never stage directions, brackets, or actions.
+- Stay on the topic broadly, but let the conversation wander naturally like humans do.
+- End only when the discussion has clearly landed (a natural sign-off or wrap-up), then output exactly: [END]
+- Aim for roughly {max_turns} lines total, but end early if it feels done.
+
+OUTPUT FORMAT — exactly one line per response:
+  <HostName>: <the line>
 """
 
 
@@ -73,6 +75,7 @@ def build_system_prompt(topic: str, hosts: list[Host]) -> str:
 
 
 USER_TURN_PROMPT = (
-    "Continue the conversation. Output the next speaker's single line now "
-    "(format 'Name: line'), or '[END]' if it is naturally concluded."
+    "Continue the conversation naturally. Pick whichever host should speak next "
+    "(not strictly alternating) and write their next line — short or long as fits. "
+    "Output 'Name: line', or '[END]' if the episode has naturally concluded."
 )

@@ -68,15 +68,17 @@ export default function Home() {
   function setupMediaSource() {
     const audio = audioRef.current;
     if (!audio) return;
-    if (!window.MediaSource || !MediaSource.isTypeSupported("audio/mpeg")) {
-      // Fallback: play the completed blob once at the end (no live progressive).
+    // Backend now streams WebM/Opus, which Chrome/Firefox MSE supports natively
+    // (unlike raw mp3). If unsupported, finalize() falls back to a whole-blob play.
+    const mime = "audio/webm;codecs=opus";
+    if (!window.MediaSource || !MediaSource.isTypeSupported(mime)) {
       return;
     }
     const ms = new MediaSource();
     audio.src = URL.createObjectURL(ms);
     msRef.current = ms;
     ms.addEventListener("sourceopen", () => {
-      const sb = ms.addSourceBuffer("audio/mpeg");
+      const sb = ms.addSourceBuffer(mime);
       sbRef.current = sb;
       sb.mode = "sequence";
       // Append buffered chunks that arrived before sourceopen.
@@ -150,8 +152,8 @@ export default function Home() {
       };
       setTimeout(flushThenEnd, 50);
     } else if (audioRef.current && chunksRef.current.length > 0) {
-      // No MSE (e.g. Chrome lacks audio/mpeg): play the complete blob once, smoothly.
-      const blob = new Blob(chunksRef.current, { type: "audio/mpeg" });
+      // No MSE: play the complete webm blob once, smoothly.
+      const blob = new Blob(chunksRef.current, { type: "audio/webm" });
       audioRef.current.src = URL.createObjectURL(blob);
       audioRef.current.play().catch(() => {});
     }

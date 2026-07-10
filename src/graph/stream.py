@@ -15,6 +15,7 @@ from ..config import config
 from ..db import update_status
 from .tts import synthesize_turn
 from .dialogue import stream_turns, DialogueError, Turn
+from .transcode import mp3_chunk_to_webm, WEBM_MIME
 
 
 def _sse(event: str, data: str) -> str:
@@ -37,8 +38,11 @@ async def run_pipeline(session_id: str, topic: str, host_ids: list[str], audio_p
                 async for chunk in synthesize_turn(turn.text, turn.speaker):
                     f.write(chunk)
                     total_bytes += len(chunk)
-                    # base64 so the browser can decode per-chunk safely over SSE
-                    yield _sse("audio", base64.b64encode(chunk).decode("ascii"))
+                    # Transcode mp3 -> webm/opus so the browser can stream live via MSE
+                    # (Chrome does not support MediaSource audio/mpeg). Each webm is a
+                    # standalone segment appended in sequence mode on the client.
+                    webm = mp3_chunk_to_webm(chunk)
+                    yield _sse("audio", base64.b64encode(webm).decode("ascii"))
 
         if turn_count == 0:
             raise DialogueError("Gemini produced no usable dialogue turns.")
@@ -50,6 +54,7 @@ async def run_pipeline(session_id: str, topic: str, host_ids: list[str], audio_p
                 {
                     "status": "done",
                     "download_url": f"/api/podcast/download/{session_id}",
+                    "format": "webm",
                     "bytes": total_bytes,
                     "turns": turn_count,
                 }

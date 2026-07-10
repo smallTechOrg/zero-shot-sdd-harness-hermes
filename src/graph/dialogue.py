@@ -70,7 +70,7 @@ async def stream_turns(topic: str, host_ids: list[str]):
         try:
             resp = model.generate_content(
                 [sys_prompt] + history + [USER_TURN_PROMPT],
-                generation_config={"max_output_tokens": 220, "temperature": 0.8},
+                generation_config={"max_output_tokens": 400, "temperature": 0.9},
             )
         except Exception as e:  # surface real Gemini failures; never silently stub
             raise DialogueError(f"Gemini call failed: {type(e).__name__}") from e
