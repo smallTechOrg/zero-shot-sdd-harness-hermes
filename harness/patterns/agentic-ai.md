@@ -84,6 +84,14 @@ The reusable catalogue of agentic design patterns — generic engineering doctri
 **When** — Choose at scale or under tight latency/cost limits; avoid premature tuning before a real budget pressure appears.
 **Example** — Route easy queries to a small model and escalate only hard ones to the large model.
 
+> **Hard rule — never loop an LLM call per output token/line.** In a streaming build, generate the
+> *whole* deliverable in ONE call, then stream/parse it client-side (one line at a time). We hit this
+> the hard way: a podcast builder called Gemini **once per spoken line** (~12–24 calls/episode), which
+> blew the user's **monthly spend cap** and blocked all further testing. Batching to one call per
+> episode cut usage ~20x and removed the blocker. Same applies to any "generate then stream" pattern:
+> one generation, many client-side yields. If you must stream tokens, use the provider's native
+> streaming API (one call, token deltas) — not N separate completions.
+
 ### 17. Reasoning Techniques
 **What** — Structured reasoning strategies: chain-of-thought, ReAct, tree/graph-of-thought, self-consistency.
 **When** — Choose for problems where explicit intermediate reasoning improves accuracy; avoid on simple lookups where it only burns tokens.

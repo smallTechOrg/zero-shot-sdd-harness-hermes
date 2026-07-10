@@ -19,6 +19,14 @@ feedback from the prior gate.
 > and fanned out workers with the `Agent` tool. Here the workers are spawned with
 > `delegate_task` (background batch, up to 3 concurrent children — the `delegation.max_concurrent_children`
 > cap). Everything else about the role is unchanged.
+>
+> **`max_spawn_depth=1` reality (Hermes default):** a depth-1 orchestrator here **cannot** spawn its own
+> depth-2 children. The nested fan-out (agent-builder → code-generator → qa-auditor) therefore does NOT
+> work as written. Two valid options: (a) raise `delegation.max_spawn_depth` to 2 in `config.yaml` to
+> enable true fan-out, or (b) run the build **inline** — read the specialist role files (`harness/agents/*.md`)
+> as procedure references and do the design/scaffold/build/gate yourself within this one session. For our
+> auto-podcaster test we used (b): agent-builder ran inline and returned the Phase-1 handoff directly. Pick
+> the option your environment supports; do not assume fan-out will succeed.
 
 ## Source of truth (obey, do not restate)
 
@@ -106,6 +114,12 @@ owns the server lifecycle and launches it after receiving the handoff. The hando
 notes**: the absolute project root path; the server run command; the live URL; what was built; what to
 click/type/look at and expected result; which parts are clearly-labelled stubs vs real; what the next
 phase adds.
+
+> **Hard return gate — commit + push + open PR BEFORE you return.** A build is not "done" until the
+> code is committed, pushed to the feature branch, and a PR is open. Returning at 95% (code written but
+> not committed/pushed/PR'd) is a failure mode we hit in practice — the parent session had to finish the
+> git work. If you cannot complete the commit/push/PR (e.g. auth failure), that is a BLOCKER to surface,
+> not a handoff to return.
 
 ## Stage 5 — Ship (after the final phase passes its gate — you own git)
 
