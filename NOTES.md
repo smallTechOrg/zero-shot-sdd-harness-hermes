@@ -97,6 +97,13 @@ SSE + mp3 download). Branch `feature/auto-podcaster-v0.1`, committed, pushed, PR
   **Phase-2 upgrade:** transcode MP3 chunks to a container MSE accepts (webm/opus via ffmpeg.wasm,
   or pipe via a real streaming muxer) to get true live progressive playback in Chrome. Track this.
 
+- [ ] **Gemini free-tier quota (`ResourceExhausted`) bites during heavy testing (learned 2026-07-11).**
+  After many generate runs in one session, `models/gemini-2.5-flash` started returning 429
+  `ResourceExhausted`. The harness correctly refused to stub (DialogueError surfaced, stream emitted
+  `error` event) — good. But it blocks live testing. **Harness lesson:** during a build, the agent
+  should (a) cap test generations, (b) add retry/backoff on 429, and (c) tell the user to wait for
+  quota reset or use a paid key. Also: the e2e test burned the quota; consider a `--limit 1` mode.
+
 ### Human testing gate (current)
 
 You test only by interacting with the running app (no terminal commands from you). I own launching
