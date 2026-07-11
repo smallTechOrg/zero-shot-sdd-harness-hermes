@@ -16,6 +16,11 @@ class CheckRequest(BaseModel):
     student_answer: str = Field(min_length=1)
 
 
+class PhraseCheckRequest(BaseModel):
+    """A transcribed phrase: one {name, duration} per step, in order."""
+    submitted: list[dict] = Field(min_length=1)
+
+
 class NextRequest(BaseModel):
     drill_id: str
     student_id: str
@@ -40,6 +45,10 @@ class ExerciseOut(BaseModel):
     is_rest: bool | None = None
     staff_svg: str
     options: list[str]
+    # Phase 3: sight-reading / transcription
+    phrase: list[dict] | None = None
+    steps: int | None = None
+    correct: list | None = None  # computed [name, dur] sequence (Phase 3)
 
 
 class StartResponse(BaseModel):

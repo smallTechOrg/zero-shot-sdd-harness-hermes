@@ -74,6 +74,35 @@ Delivers 3 capabilities, all built and verified (37 tests pass, live in-browser)
 
 Correctness rule upheld: all answers (note names + durations) are computed in `src/music/`; the LLM is used only for teaching text (one call per drill set).
 
-### Phase 3 — Chords, Progressions & Studio (planned)
+### Phase 3 — Sight-reading & transcription (SHIPPED in v0.3)
 
-> Wires the remaining labelled stubs: chord/harmony drills, chord-progression / sight-reading, multi-student studio, PDF export, and animated full-piece playback. *Not built in this handoff.*
+> User goal: learn to *read and write* notation, then *produce beats and
+> melodies and write notation for original tunes*. The arc is reading → transcribing →
+> writing → composing. Phase 3 is the **reading/transcribing** step:
+
+1. **Sight-read a phrase:** the tutor shows a short notated phrase (2–4 steps of
+   pitch + rhythm on the staff) and plays it (synth audio + optional speech).
+2. **Transcribe it:** the student reproduces the sequence — note name + duration per
+   step. Correctness is COMPUTED from the generated phrase (never the LLM), reusing the
+   Phase 1/2 music core + spaced-repetition scheduler.
+3. Reuses `src/music/{theory,rhythm,staff}.py` and `src/scheduler.py`; adds
+   `src/music/phrase.py` (phrase generator + sequence-check) and phrase endpoints.
+
+**Standards used (interoperable, not a walled garden):** SMuFL (Bravura, OFL) for
+notation glyphs; MIDI-driven synth audio; computed correctness. Future: MusicXML
+export so tunes open in MuseScore/Dorico/Sibelius/Flat.
+
+### Phase 4 — Writing notation (planned)
+
+> Reverse of Phase 3: the tutor plays / describes a melody and the student *writes* it
+> as notation (places notes on the staff). Serves "write notation for original tunes".
+
+### Phase 5 — Produce beats & melodies (planned)
+
+> Compose original tunes: sequence drums/beats + a melody, hear it back, and export the
+> notation. Closes the "produce beats and melodies and write notations for original
+> tunes" goal.
+
+> (Old roadmap stubs — chords/harmony drills, chord-progression, multi-student studio,
+> PDF/animation — are sub-features that can slot into Phases 3–5 as needed; not a fixed plan.)
+

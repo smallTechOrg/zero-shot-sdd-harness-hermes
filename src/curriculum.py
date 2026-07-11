@@ -44,12 +44,24 @@ def topic_blocks(clefs: list[str] | None = None) -> dict[str, dict]:
         "items": rhythm_items,
         "goal": "Name note & rest durations (whole → sixteenth).",
     }
+
+    # Phase 3: sight-reading / transcription — one scheduling item for the
+    # whole-phrase skill (per-step correctness is internal to src.music.phrase).
+    blocks["phrase"] = {
+        "id": "phrase",
+        "label": "Sight-reading & transcription",
+        "type": "phrase",
+        "clefs": clefs,
+        "items": ["phrase"],
+        "goal": ("Transcribe a short notated phrase — note name + duration per "
+                 "step, in order."),
+    }
     return blocks
 
 
 def topic_order() -> list[str]:
     """A sensible learning order across the curriculum (used by /suggest)."""
-    return ["note-treble", "note-bass", "rhythm"]
+    return ["note-treble", "note-bass", "rhythm", "phrase"]
 
 
 def item_topic(item_id: str) -> str | None:

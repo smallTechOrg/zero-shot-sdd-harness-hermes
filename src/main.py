@@ -28,7 +28,13 @@ from .db import (
     get_mastery,
     init_db,
 )
-from .drill import check_answer, make_exercise, suggest_next_topic, topic_for
+from .drill import (
+    check_answer,
+    check_phrase,
+    make_exercise,
+    suggest_next_topic,
+    topic_for,
+)
 from .llm import generate_teaching
 from .schemas import (
     CheckRequest,
@@ -36,12 +42,13 @@ from .schemas import (
     CurriculumTopic,
     ExerciseOut,
     NextRequest,
+    PhraseCheckRequest,
     StartRequest,
     StartResponse,
     SuggestOut,
     TeachingOut,
 )
-from .synth import synth_wav_bytes
+from .synth import synth_phrase_wav_bytes, synth_wav_bytes
 
 logging.basicConfig(
     level=logging.INFO,
@@ -102,8 +109,8 @@ def create_app() -> FastAPI:
         t0 = time.time()
         if not req.clefs or any(c not in ("treble", "bass") for c in req.clefs):
             return api_error("bad_clefs", "clefs must be subset of ['treble','bass']")
-        if req.drill_type not in ("note", "rhythm"):
-            return api_error("bad_drill_type", "drill_type must be 'note' or 'rhythm'")
+        if req.drill_type not in ("note", "rhythm", "phrase"):
+            return api_error("bad_drill_type", "drill_type must be 'note', 'rhythm', or 'phrase'")
         ensure_student(req.student_id, req.display_name)
         # ONE Gemini call per drill set (teaching text only).
         teaching = generate_teaching(
@@ -236,6 +243,39 @@ def create_app() -> FastAPI:
             logger.warning("edge-tts failed: %s", exc)
             return api_error("tts_unavailable", "speech unavailable", 503)
         return Response(content=mp3, media_type="audio/mpeg")
+
+    # ----------------------------------------------------------------------- #
+    # Phase 3 — Sight-reading & transcription
+    # ----------------------------------------------------------------------- #
+    @app.get("/api/phrase/{phrase_id}/audio", response_model=None)
+    async def phrase_audio(phrase_id: str):
+        ex = get_exercise_by_id(phrase_id)
+        if not ex:
+            return api_error("bad_phrase", "unknown phrase_id", 404)
+        if ex.get("type") != "phrase" or not ex.get("phrase"):
+            return api_error("bad_phrase", "exercise is not a phrase", 400)
+        from .music import phrase as P
+
+        phrase = {"clef": ex["clef"], "steps": ex["phrase"]}
+        wav = synth_phrase_wav_bytes(phrase)
+        return Response(content=wav, media_type="audio/wav")
+
+    @app.post("/api/phrase/{phrase_id}/check", response_model=None)
+    async def phrase_check(phrase_id: str, req: PhraseCheckRequest):
+        ex = None
+        student_id = None
+        for sess in _SESSIONS.values():
+            cur = sess.get("current")
+            if cur and cur["id"] == phrase_id:
+                ex = cur
+                student_id = sess["student_id"]
+                break
+        if not ex or not student_id:
+            return api_error("bad_phrase", "unknown phrase_id", 404)
+        if ex.get("type") != "phrase":
+            return api_error("bad_phrase", "exercise is not a phrase", 400)
+        result = check_phrase(ex, req.submitted, student_id)
+        return ok(result)
 
     @app.get("/api/mastery", response_model=None)
     async def mastery(student_id: str = Query(...)):

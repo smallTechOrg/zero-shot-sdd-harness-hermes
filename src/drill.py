@@ -24,6 +24,7 @@ from .db import (
     save_sched,
     weight_for,
 )
+from .music import phrase as P
 from .music import rhythm as R
 from .music.staff import render_rhythm, render_staff
 from .music.theory import (
@@ -36,7 +37,7 @@ from .music.theory import (
 )
 from .scheduler import build_records, default_state, review, select_due
 
-DRILL_TYPES = ("note", "rhythm")
+DRILL_TYPES = ("note", "rhythm", "phrase")
 
 # Monotonic counter so the scheduler rotates coverage across items instead of
 # re-picking the same one (seed must advance per call, not be wall-clock).
@@ -135,7 +136,38 @@ def make_exercise(
     now = now if now is not None else time.time()
     if drill_type == "rhythm":
         return _make_rhythm_exercise(student_id, now)
+    if drill_type == "phrase":
+        return _make_phrase_exercise(clefs, now)
     return _make_note_exercise(student_id, clefs, now)
+
+
+# --------------------------------------------------------------------------- #
+# Phrase (sight-reading / transcription) exercises — Phase 3
+# --------------------------------------------------------------------------- #
+def make_phrase(clef: str = "treble", rng: random.Random | None = None) -> dict:
+    """Build a phrase dict: {clef, steps, correct}. Correctness is COMPUTED."""
+    phrase = P.generate_phrase(clef=clef, rng=rng)
+    phrase["correct"] = P.correct_transcription(phrase)
+    return phrase
+
+
+def _make_phrase_exercise(clefs: list[str], now: float) -> dict:
+    clef = (clefs or ["treble"])[0]
+    phrase = make_phrase(clef=clef)
+    steps = phrase["steps"]
+    correct = phrase["correct"]
+    return {
+        "id": f"phrase_{uuid.uuid4().hex[:12]}",
+        "drill_id": None,
+        "type": "phrase",
+        "clef": clef,
+        "phrase": steps,
+        "correct": correct,  # list of [name, duration] (COMPUTED)
+        "correct_name": "phrase",  # not a single name; checked per-step
+        "staff_svg": P.render_phrase_svg(phrase),
+        "options": [],  # transcription UI supplies its own controls
+        "steps": len(steps),
+    }
 
 
 def _make_note_exercise(student_id: str, clefs: list[str], now: float) -> dict:
@@ -174,11 +206,32 @@ def _make_rhythm_exercise(student_id: str, now: float) -> dict:
 def topic_for(exercise: dict) -> str:
     if exercise.get("type") == "rhythm":
         return f"rhythm:{exercise['label']}"
+    if exercise.get("type") == "phrase":
+        return "phrase"  # whole phrase is one scheduling item
     return f"{exercise['clef']}:{exercise['correct_name']}"
 
 
 def item_id_for(exercise: dict) -> str:
     return topic_for(exercise)
+
+
+def check_phrase(exercise: dict, submitted: list[dict], student_id: str) -> dict:
+    """Verify a transcribed phrase sequence, update mastery/scheduling.
+
+    ``submitted`` is a list of {"name", "duration"} per step. The verdict is
+    COMPUTED by src.music.phrase against the generated phrase — never the LLM.
+    """
+    result = P.check_transcription({"clef": exercise["clef"], "steps": exercise["phrase"]}, submitted)
+    # Reuse computed correct sequence for the hint.
+    topic = topic_for(exercise)
+    record_result(student_id, topic, result["correct"])
+    iid = item_id_for(exercise)
+    prev = get_sched(student_id, iid)
+    state = prev if prev else default_state(iid, time.time())
+    state = review(state, result["correct"], time.time())
+    save_sched(student_id, state)
+    result["topic"] = topic
+    return result
 
 
 def check_answer(exercise: dict, student_answer: str, student_id: str) -> dict:

@@ -1,5 +1,5 @@
-"""Music package — deterministic note-name, rhythm, and staff rendering core."""
+"""Music package — deterministic note-name, rhythm, phrase, and staff rendering core."""
 
-from . import rhythm, staff, theory
+from . import phrase, rhythm, staff, theory
 
-__all__ = ["rhythm", "staff", "theory"]
+__all__ = ["phrase", "rhythm", "staff", "theory"]

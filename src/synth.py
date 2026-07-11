@@ -7,11 +7,11 @@ The pitch is taken from the COMPUTED midi (never the LLM).
 from __future__ import annotations
 
 import io
-import struct
 import wave
 
 import numpy as np
 
+from .music.rhythm import beats
 from .music.theory import pitch_frequency
 
 
@@ -35,6 +35,38 @@ def _note_samples(midi: int, duration: float = 0.8, sr: int = 22050) -> np.ndarr
 def synth_wav_bytes(midi: int, duration: float = 0.8, sr: int = 22050) -> bytes:
     """Return a WAV file (bytes) for the given MIDI note."""
     samples = _note_samples(midi, duration, sr)
+    pcm = (samples * 32767.0).clip(-32768, 32767).astype("<i2")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(pcm.tobytes())
+    return buf.getvalue()
+
+
+def synth_phrase_wav_bytes(
+    phrase: dict,
+    seconds_per_beat: float = 0.6,
+    sr: int = 22050,
+) -> bytes:
+    """Concatenate a phrase's steps into one WAV.
+
+    Pitched steps play their note for their duration's worth of beats; rests
+    become matching stretches of silence. The whole phrase is one seamless
+    stream so the student can hear the transcribed sequence. Computed from the
+    phrase's MIDI + duration labels — never the LLM.
+    """
+    chunks: list[np.ndarray] = []
+    for step in phrase["steps"]:
+        dur_sec = max(0.15, beats(step["duration_label"]) * seconds_per_beat)
+        if step.get("is_rest") or step.get("midi") is None:
+            chunks.append(np.zeros(int(sr * dur_sec), dtype=np.float32))
+        else:
+            chunks.append(_note_samples(step["midi"], dur_sec, sr))
+    if not chunks:
+        chunks.append(np.zeros(int(sr * 0.3), dtype=np.float32))
+    samples = np.concatenate(chunks)
     pcm = (samples * 32767.0).clip(-32768, 32767).astype("<i2")
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:

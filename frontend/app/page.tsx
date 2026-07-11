@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Staff from "./staff";
+import PhraseTranscription from "./phrase";
 
 // ---- types mirror src/schemas.py (server is source of truth) ----
 interface Exercise {
   id: string;
   drill_id?: string;
-  type: string; // "note" | "rhythm"
+  type: string; // "note" | "rhythm" | "phrase"
   midi: number | null;
   correct_name: string;
   clef: string | null;
@@ -15,6 +16,13 @@ interface Exercise {
   is_rest: boolean | null;
   staff_svg: string;
   options: string[];
+  phrase?: { midi: number | null; duration_label: string; is_rest: boolean }[] | null;
+  steps?: number | null;
+}
+
+interface PhraseStep {
+  name: string;
+  duration: string;
 }
 interface Teaching {
   text: string;
@@ -72,10 +80,10 @@ async function jget<T>(url: string): Promise<T> {
   return data.data as T;
 }
 
-// Genuinely-later stubs (Phase 3+). Clearly non-functional, never a bug.
+// Genuinely-later stubs (Phase 4+). Clearly non-functional, never a bug.
 const STUBS = [
   "Chords drill",
-  "Progressions / sight-reading",
+  "Progressions",
   "Multi-student studio",
   "PDF / image export",
   "Animated full-piece playback",
@@ -94,7 +102,7 @@ function topicMastery(t: DashTopic): number {
 export default function Page() {
   const [studentId] = useState("student-1");
   const [clefs, setClefs] = useState<string[]>(["treble"]);
-  const [drillType, setDrillType] = useState<"note" | "rhythm">("note");
+  const [drillType, setDrillType] = useState<"note" | "rhythm" | "phrase">("note");
   const [drillId, setDrillId] = useState<string | null>(null);
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [teaching, setTeaching] = useState<Teaching | null>(null);
@@ -110,6 +118,7 @@ export default function Page() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const isRhythm = drillType === "rhythm";
+  const isPhrase = drillType === "phrase";
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -144,6 +153,27 @@ export default function Page() {
     } catch {
       setPlaying(false);
       setError("Audio unavailable — check your browser sound.");
+    }
+  }, []);
+
+  const playPhrase = useCallback(async (phraseId: string) => {
+    if (!phraseId) return;
+    setPlaying(true);
+    try {
+      const r = await fetch(`${API}/phrase/${phraseId}/audio`);
+      if (!r.ok) throw new Error("audio failed");
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = new Audio(url);
+      audioRef.current = a;
+      await a.play();
+      a.onended = () => {
+        setPlaying(false);
+        URL.revokeObjectURL(url);
+      };
+    } catch {
+      setPlaying(false);
+      setError("Phrase audio unavailable — check your browser sound.");
     }
   }, []);
 
@@ -184,9 +214,12 @@ export default function Page() {
       setTeaching(data.teaching);
       setExercise(data.exercise);
       setStatus("ready");
-      // note drills auto-play the sound; rhythm drills have no pitch audio
+      // note drills auto-play the sound; rhythm drills have no pitch audio;
+      // phrase drills auto-play the whole sequence.
       if (data.exercise.type === "note")
         setTimeout(() => playNote(data.exercise.id), 250);
+      else if (data.exercise.type === "phrase")
+        setTimeout(() => playPhrase(data.exercise.id), 250);
     } catch (e: any) {
       setError(e.message || "Failed to start drill");
       setStatus("idle");
@@ -207,11 +240,75 @@ export default function Page() {
       setExercise(ex);
       setStatus("ready");
       if (ex.type === "note") setTimeout(() => playNote(ex.id), 200);
+      else if (ex.type === "phrase") setTimeout(() => playPhrase(ex.id), 200);
     } catch (e: any) {
       setError(e.message || "Failed to load next item");
       setStatus("ready");
     }
-  }, [drillId, studentId, drillType, playNote]);
+  }, [drillId, studentId, drillType, playNote, playPhrase]);
+
+  // Phrase transcription: one {name, duration} per step, in order.
+  const [transcription, setTranscription] = useState<PhraseStep[]>([]);
+  const [phraseResult, setPhraseResult] = useState<{
+    correct: boolean;
+    first_wrong_step: number | null;
+    total_steps: number;
+    details: { name_ok: boolean; duration_ok: boolean; expected: [string, string] }[];
+  } | null>(null);
+
+  const initTranscription = useCallback((n: number) => {
+    setTranscription(
+      Array.from({ length: n }, () => ({ name: "", duration: "" }))
+    );
+    setPhraseResult(null);
+  }, []);
+
+  // When a new phrase arrives, reset its transcription grid.
+  useEffect(() => {
+    if (exercise?.type === "phrase" && exercise.steps) {
+      initTranscription(exercise.steps);
+    }
+  }, [exercise, initTranscription]);
+
+  const setStep = useCallback((i: number, field: keyof PhraseStep, value: string) => {
+    setTranscription((prev) => {
+      const copy = prev.slice();
+      copy[i] = { ...copy[i], [field]: value };
+      return copy;
+    });
+  }, []);
+
+  const submitPhrase = useCallback(async () => {
+    if (!exercise) return;
+    setFeedback(null);
+    try {
+      const res = await jpost<{
+        correct: boolean;
+        first_wrong_step: number | null;
+        total_steps: number;
+        details: { name_ok: boolean; duration_ok: boolean; expected: [string, string] }[];
+      }>(`${API}/phrase/${exercise.id}/check`, { submitted: transcription });
+      setPhraseResult(res);
+      if (res.correct) {
+        setFeedback({ kind: "correct", msg: "Correct! You transcribed the whole phrase." });
+        speak(exercise.id, "Correct! You transcribed the whole phrase.");
+        loadDashboard();
+        setTimeout(() => nextNote(), 1600);
+      } else {
+        const step = res.first_wrong_step ?? 0;
+        const exp = res.details[step]?.expected ?? ["?", "?"];
+        setFeedback({
+          kind: "wrong",
+          msg: `Step ${step + 1} is wrong — expected ${exp[0]} (${exp[1]}). Try again.`,
+        });
+        if (res.first_wrong_step !== null)
+          speak(exercise.id, `Step ${step + 1} is wrong. Expected ${exp[0]} ${exp[1]}.`);
+        loadDashboard();
+      }
+    } catch (e: any) {
+      setError(e.message || "Phrase check failed");
+    }
+  }, [exercise, transcription, speak, nextNote, loadDashboard]);
 
   const submit = useCallback(
     async (answer: string) => {
@@ -256,7 +353,32 @@ export default function Page() {
     [exercise, speak, nextNote]
   );
 
-  // When a drill is active, pre-load upcoming items via SSE (streaming).
+  // Client-side deterministic MIDI -> name (mirrors src.music.theory, used
+  // only to display the revealed phrase answer — never for correctness).
+  const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  function midiToNameLocal(midi: number): string {
+    const octave = Math.floor(midi / 12) - 1;
+    return `${NOTE_NAMES[midi % 12]}${octave}`;
+  }
+
+  const revealPhrase = useCallback(() => {
+    if (!exercise?.phrase) return;
+    const names = exercise.phrase.map((s) =>
+      s.is_rest || s.midi === null ? "rest" : midiToNameLocal(s.midi)
+    );
+    setFeedback({
+      kind: "wrong",
+      msg:
+        "Answer — " +
+        names
+          .map((nm, i) => `step ${i + 1}: ${nm} (${exercise.phrase![i].duration_label})`)
+          .join(" · "),
+    });
+    speak(exercise.id, "The phrase is: " + names.join(", "));
+    setTimeout(() => nextNote(), 2400);
+  }, [exercise, speak, nextNote]);
+
+
   useEffect(() => {
     if (!drillId) return;
     const es = new EventSource(
@@ -268,7 +390,11 @@ export default function Page() {
     return () => es.close();
   }, [drillId, studentId]);
 
-  const prompt = isRhythm ? "which duration is this?" : "which note is this?";
+  const prompt = isRhythm
+    ? "which duration is this?"
+    : isPhrase
+    ? "transcribe the phrase, step by step"
+    : "which note is this?";
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -303,7 +429,7 @@ export default function Page() {
       <div className="mb-6 flex flex-wrap items-center gap-3">
         {/* Drill type */}
         <div className="flex gap-2">
-          {(["note", "rhythm"] as const).map((t) => (
+          {(["note", "rhythm", "phrase"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setDrillType(t)}
@@ -313,12 +439,12 @@ export default function Page() {
                   : "bg-slate-200 text-slate-600"
               }`}
             >
-              {t === "note" ? "Note naming" : "Rhythm / duration"}
+              {t === "note" ? "Note naming" : t === "rhythm" ? "Rhythm / duration" : "Sight-reading"}
             </button>
           ))}
         </div>
         {/* Clefs (note drills only) */}
-        {!isRhythm && (
+        {!isRhythm && !isPhrase && (
           <div className="flex gap-2">
             {(["treble", "bass"] as const).map((c) => (
               <button
@@ -356,6 +482,15 @@ export default function Page() {
             🔊 Play note
           </button>
         )}
+        {exercise && exercise.type === "phrase" && (
+          <button
+            onClick={() => playPhrase(exercise.id)}
+            disabled={playing}
+            className="rounded-lg border border-slate-300 px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+          >
+            {playing ? "🔊 Playing…" : "🔊 Play phrase"}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -371,6 +506,8 @@ export default function Page() {
           <span className="font-semibold text-slate-600">Start drill</span>.
           {isRhythm
             ? " A rhythm symbol will appear — name its duration."
+            : isPhrase
+            ? " A short phrase appears on the staff — play it, then transcribe each step (note name + duration)."
             : " A note will appear on the staff and play its sound."}
         </div>
       )}
@@ -384,18 +521,30 @@ export default function Page() {
             </p>
 
             {/* Answer buttons */}
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {exercise.options.map((opt) => (
-                <button
-                  key={opt}
-                  onClick={() => submit(opt)}
-                  disabled={!!revealed}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-800 transition hover:border-emerald-500 hover:bg-emerald-50 disabled:opacity-50"
-                >
-                  {opt}
-                </button>
-              ))}
-            </div>
+            {isPhrase ? (
+              <PhraseTranscription
+                steps={exercise.steps ?? (exercise.phrase?.length || 0)}
+                transcription={transcription}
+                result={phraseResult}
+                onChange={setStep}
+                onSubmit={submitPhrase}
+                correctName={exercise.correct_name}
+                onReveal={revealPhrase}
+              />
+            ) : (
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {exercise.options.map((opt) => (
+                  <button
+                    key={opt}
+                    onClick={() => submit(opt)}
+                    disabled={!!revealed}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-800 transition hover:border-emerald-500 hover:bg-emerald-50 disabled:opacity-50"
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Feedback */}
             {feedback && (
