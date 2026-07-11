@@ -1,34 +1,48 @@
-# Data Model
-
-> Fill in this section — see comments below.
+# Data Model — `scaffold-agent`
 
 ---
 
 ## Storage Technology
 
-<!-- FILL IN: What database/storage does this project use and why? -->
+SQLite (dev) via SQLAlchemy 2.0 core + Alembic. Production swaps to Postgres by changing `DATABASE_URL` — migrations are identical.
 
 ## Entities
 
-<!-- FILL IN: One section per major entity. -->
+### Entity: `Run`
 
-### Entity: <!-- Name -->
-
-<!-- FILL IN: What does this entity represent? -->
+Represents a single agent invocation. Used for observability in dev.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| id | <!-- type --> | yes | Primary key |
-| <!-- field --> | <!-- type --> | <!-- yes/no --> | <!-- description --> |
+| id | Integer | yes | Primary key |
+| created_at | DateTime | yes | Run start time |
+| status | String(32) | yes | queued / running / succeeded / failed |
+| user_message | Text | yes | Last user message (Phase 1 stores the request body). |
+| assistant_message | Text | no | Generated reply, if any. |
+| error_message | Text | no | Reason for failure, if any. |
 
-### Relationships
+### Entity: `Message` (optional Phase 1)
 
-<!-- FILL IN: How do entities relate to each other? -->
+Persisted chat history.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | Integer | yes | Primary key |
+| run_id | Integer | yes | Foreign key to `Run`. |
+| role | String(16) | yes | `user` or `assistant`. |
+| content | Text | yes | Message body. |
+| created_at | DateTime | yes | Message time. |
+
+## Relationships
+
+- Run 1..n Message.
 
 ## Data Lifecycle
 
-<!-- FILL IN: When is data created, updated, and deleted? Is anything time-boxed or archived? -->
+- Created on `POST /api/chat`.
+- Updated when the agent writes its reply.
+- No deletion strategy in Phase 1; runs table grows unbounded; user can delete `data/app.db`.
 
 ## Sensitive Data
 
-<!-- FILL IN: What fields contain PII or secrets? How are they protected? -->
+- `.env` is ignored by git. No PII. The chat history is ephemeral and local.

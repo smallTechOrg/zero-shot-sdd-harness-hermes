@@ -1,68 +1,101 @@
-# Architecture
+# Architecture — `scaffold-agent`
 
-> Fill in this section — see comments below.
+> Single source of truth for Phase 1. Template source lives in `templates/; `scripts/bootstrap.py` is the generator.
 
 ---
 
 ## System Overview
 
-<!-- FILL IN: One paragraph describing the system at a high level. Who/what interacts with it? -->
+This repo is both a **generator source** and a **spec harness**.
+`main` contains:
+- the canonical spec in `spec/`,
+- engineering rules in `harness/`,
+- a project-generation CLI in `scripts/`,
+- embedded project templates in `templates/`.
+
+A user runs `scripts/bootstrap.py <name>` (or wraps it via `scripts/new_agent.sh`) and a complete project tree is written to a fresh directory outside this repo.
+The generated project is a runnable FastAPI + React + SQLite service with an agent stub.
 
 ## Component Map
 
-<!-- FILL IN: List the major components and what each does. -->
-
 ```
-[Component A]
-    ↓
-[Component B]   ←→   [External Service]
-    ↓
-[Component C]
+templates/agent-project/   ← embedded source templates
+    │
+    ▼
+scripts/bootstrap.py       ← generator engine (read + substitute + write)
+    │
+    ▼
+<user-cwd>/<project-name>/ ← generated project (not in main)
+    ├── backend/
+    │     ├── main.py       ← FastAPI app
+    │     ├── db.py         ← SQLAlchemy engine/session
+    │     ├── models.py     ← ORM models
+    │     ├── alembic/      ← migrations
+    │     └── ...
+    ├── frontend/
+    │     ├── src/          ← Vite + React + TS
+    │     └── package.json
+    ├── docker-compose.yml
+    ├── Dockerfile.*
+    └── README.md
 ```
 
 ## Layers
 
-<!-- FILL IN: Describe the layers of the system (e.g., API → Agent Loop → Tools → Storage). -->
-
 | Layer | Responsibility |
 |-------|----------------|
-| <!-- layer --> | <!-- responsibility --> |
+| Generator | `bootstrap.py` reads `templates/`, substitutes tags, writes to `PROJECT_ROOT`. |
+| API | FastAPI routers expose `/health` and `/api/chat`; optional `/api/runs` for trace storage in dev. |
+| Agent Stub | A single node that returns a canned reply or forwards to an LLM if a key is present. |
+| Data | SQLAlchemy 2 core + Alembic. SQLite in dev; swap to Postgres via DATABASE_URL without code changes. |
+| Frontend | Vite + React + TypeScript. Calls `/api/chat` with fetch. |
+| Ops | Docker Compose binds backend `:8000` and frontend dev server `:5173`. |
 
 ## Data Flow
 
-<!-- FILL IN: Walk through the main data flow from trigger to output. -->
-
-1. Trigger: <!-- how does the agent start? (cron, webhook, user input, etc.) -->
-2. <!-- step 2 -->
-3. <!-- step 3 -->
-4. Output: <!-- what does the agent produce? -->
+1. User POSTs `{messages:[...]}` to `/api/chat`.
+2. FastAPI validates with Pydantic (optional; MVP passes through).
+3. Agent stub builds a prompt, checks `LLM_API_KEY` in env.
+   - Key present: calls OpenAI-compatible or Anthropic-compatible endpoint.
+   - No key: returns stub response with the user message echoed back with a canned prefix.
+4. Response is returned as `{"reply": "..."}`.
+5. Frontend appends user bubble and assistant bubble.
 
 ## External Dependencies
 
-<!-- FILL IN: APIs, services, databases the agent depends on. -->
-
 | Dependency | Purpose | Failure Mode |
 |------------|---------|--------------|
-| <!-- name --> | <!-- what it does --> | <!-- what happens if it's down --> |
+| OpenAI/Anthropic API | Live agent responses (optional) | Stub path is used automatically; service remains up. |
+| Docker | Local dev via Compose | User can run backend/frontend manually with `npm run dev` + `uvicorn`. |
+| npm | Frontend build | Fails clearly with `npm install` error. |
+| uv / pip | Python deps | Fails clearly at install step. |
 
 ## Stack
 
-> This project's concrete technology choices (captured at intake, filled by the spec-writer). The generic, every-project rules — model-naming, DB driver, dev port, test environment — live in `harness/patterns/tech-stack.md`; this section is only what **this** project picked.
-
-- **Language:** <!-- FILL IN: e.g., Python 3.12 -->
-- **Agent framework:** <!-- FILL IN: e.g., LangGraph / custom / none -->
-- **LLM provider + model:** <!-- FILL IN: e.g., Anthropic / claude-sonnet-4-6 -->
-- **Backend:** <!-- FILL IN: e.g., FastAPI / none -->
-- **Database + ORM:** <!-- FILL IN: e.g., PostgreSQL + SQLAlchemy 2.0 / none -->
-- **Frontend:** <!-- FILL IN: e.g., Next.js / none -->
-- **Dependency management:** <!-- FILL IN: e.g., uv + pyproject.toml -->
+- **Language:** Python 3.11+
+- **Backend:** FastAPI + Uvicorn
+- **ORM + DB:** SQLAlchemy 2.0 + Alembic + SQLite (dev); DATABASE_URL-switchable to Postgres
+- **Frontend:** Vite + React 18 + TypeScript + Tailwind CSS
+- **LLM integration:** OpenAI-compatible or Anthropic-compatible client optional; stub fallback
+- **Packaging:** `pyproject.toml` + `requirements.txt` in generated backend; `package.json` in generated frontend
 
 | Key library | Version | Purpose |
 |-------------|---------|---------|
-| <!-- name --> | <!-- ver --> | <!-- purpose --> |
+| fastapi | latest | API |
+| uvicorn[standard] | latest | ASGI server |
+| sqlalchemy | 2.x | ORM |
+| alembic | latest | Migrations |
+| react | 18 | Frontend UI |
+| vite | 6 | Frontend tooling |
+| axios or fetch | — | HTTP from frontend |
 
-**Avoid:** <!-- FILL IN: libraries/patterns explicitly off-limits, and why -->
+**Avoid:**
+- LangGraph / CrewAI / AutoGen in the base template (Phase 1 stub keeps dependency surface small).
+- SQLAlchemy 1.x (ver 2 only).
+- TypeScript generation beyond the template (no transpile-from-JS).
 
 ## Deployment Model
 
-<!-- FILL IN: How does this run? (local script, cloud function, long-running service, etc.) -->
+- **Local dev:** `docker compose up` binds `:8000` and `:5173`.
+- **GCP VM:** deploy with two containers on Cloud Run or a single GCE VM running Docker + Compose.
+- **Migration:** `alembic upgrade head` runs as an init container or pre-start command in the backend Dockerfile.

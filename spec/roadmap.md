@@ -1,62 +1,86 @@
-# Roadmap
+# Roadmap — `scaffold-agent`
 
-> Fill in each section. Run `/zero-shot-build [your idea]` to have it filled automatically.
+> Filled by the spec-writer sub-agent. Every field is now authoritative for Phase 1.
+> Tests run against real behavior on the tested path; generated outputs never enter `main`.
 
 ---
 
-## What This Agent Does
+## What This Repo Does
 
-<!-- FILL IN: One paragraph describing what this agent does, who uses it, and what problem it solves. -->
+This repo is the **scaffold product**: a self-contained hackathon starter-kit generator.
+A user clones this repo and runs `scripts/bootstrap.py <project-name>` (or `npm`/`zero-shot-build` wrapper) to emit a complete, runnable project — FastAPI backend, React frontend, SQLite dev DB, Alembic migrations, Docker Compose, and a working agent stub — in a fresh directory.
+The repo itself remains the template source on `main`; generated files never touch `main`.
 
 ## Who Uses It
 
-<!-- FILL IN: Primary user(s). What is their role? What are they trying to accomplish? -->
+Engineers in a hackathon or greenfield sprint who want a runnable FastAPI + React + SQLite skeleton immediately, without wiring ports, sessions, or migrations by hand.
 
 ## Core Problem Being Solved
 
-<!-- FILL IN: What manual or broken process does this agent replace or improve? -->
+Most scaffold repos are either empty boilerplate or opinioned generators that lock you into a framework.
+This repo gives you a **single command scaffold** that drops a runnable agent scaffold into a sibling directory you can immediately open in Claude Code, Docker, or deploy to a GCP VM.
 
 ## Success Criteria
 
-<!-- FILL IN: How do we know the agent is working? List 3-5 measurable outcomes. -->
+- `scripts/bootstrap.py my-project` creates a runnable project in a fresh directory in <60s.
+- `cd my-project && docker compose up` serves both frontend and backend.
+- `GET /health` returns 200.
+- React loads and calls backend successfully.
+- A real LLM key optionally enables live agent responses; without it, the stub behaves predictably.
+- `npm run build` succeeds for the generated frontend.
 
-- [ ] <!-- criterion 1 -->
-- [ ] <!-- criterion 2 -->
-- [ ] <!-- criterion 3 -->
+## What This Repo Does NOT Do
 
-## What This Agent Does NOT Do (Out of Scope)
-
-<!-- FILL IN: Explicit exclusions prevent scope creep. List things the agent will never do. -->
+- It does not implement user-facing application logic beyond the minimal agent stub.
+- It does not manage generated projects in `main`.
+- It does not include LangGraph, CrewAI, or AutoGen runtime in the base template (agent slot is a stub until Phase 2).
+- It does not auto-deploy; deployment instructions are provided for GCP VM.
 
 ## Key Constraints
 
-<!-- FILL IN: Hard limits — budget, latency, compliance, API rate limits, etc. -->
+- `main` is spec + generator-only; generated project trees never land on `main`.
+- Python setup uses `venv`, not system Python.
+- npm is used for the generated frontend (no pnpm).
+- The generated backend defaults to SQLite in dev, PostgreSQL-ready in prod.
+- LLM keys are provided via `.env`; no secrets are committed.
 
 ## Phases of Development
 
-<!-- FILL IN: The spec-writer fills these in. One phase = one user-testable increment, behind a human testing gate. Default each phase's slices to INDEPENDENT so generators build them concurrently; declare a dependency only when a slice truly needs another's output. Use the per-phase template below — one block per phase. -->
+> Each phase is one human-testable increment, behind a testing gate. Commands are exact.
 
-> **Phase 1 is the smallest first-time-right user-testable win.** It must work perfectly the first time the user tests it — zero rough edges on the tested path. Its backend is minimal but REAL on the one core path (no fake data on the tested path). Its frontend is visually complete: real UI for the one working path PLUS clearly-labelled NON-FUNCTIONAL stubs for everything coming later, so the user sees the vision (a stub must never be mistaken for a bug). Each later phase wires those stubs into real functionality, one increment at a time.
+### Phase 1 — Scaffold Kit (this handoff)
 
-### Phase 1 — <!-- short name -->
+- **Goal:** Deliver a runnable scaffold kit where a single command creates a working FastAPI + React + SQLite project.
+- **Independent slices:**
+  - `slice-generator` (backend) — `scripts/bootstrap.py` + embedded templates, output materialisation, substitution engine.
+  - `slice-backend-template` (backend) — FastAPI project manifest: `main.py`, `db.py`, `models.py`, `/health`, `/api/chat`, Alembic config.
+  - `slice-frontend-template` (frontend) — Vite + React + TS chat UI, Tailwind, fetch wiring.
+  - `slice-ops` (ops) — `docker-compose.yml`, `Dockerfile.backend`, `Dockerfile.frontend`, `.env.example`, README.
+- **Gate command:** `uv run pytest tests/unit/ -v` (unit tests against `/health` using TestClient), plus `npm run build` inside the generated `frontend/`.
+- **How the user tests it (handoff seed):**
+  1. From repo root: `python3 scripts/bootstrap.py my-project`
+  2. `cd my-project` (output is sibling to repo, never inside main).
+  3. `python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt`
+  4. `docker compose up --build`
+  5. Confirm `curl http://localhost:8000/health` -> 200.
+  6. Confirm React loads at `http://localhost:5173` and the chat input calls `/api/chat`.
+  7. `docker compose down`
+  8. `cd frontend && npm install && npm run build` must pass.
 
-- **Goal:** <!-- FILL IN: the single smallest user-testable win this phase delivers. -->
-- **Independent slices (parallel build units):** <!-- FILL IN: each slice is a disjoint unit a single generator owns. Note its surface (frontend / backend) and any declared dependency on another slice (default: none). -->
-  - `slice-a` (backend) — <!-- what it builds; deps: none -->
-  - `slice-b` (frontend) — <!-- what it builds; deps: none -->
-- **Key surfaces / files:** <!-- FILL IN: the files/dirs each slice touches. frontend writes the frontend surface; backend writes src/. Never the same file. -->
-- **Gate command:** <!-- FILL IN: one exact runnable command that proves the phase works — real LLM/API via .env keys, production DB driver (never SQLite-as-substitute). e.g. `uv run pytest tests/test_phase1.py` -->
-- **How the user tests it (handoff seed):** <!-- FILL IN: exact run command(s), what to click / look at, the expected result, and which parts are labelled stubs vs real. -->
+### Phase 2 — Agent Slot (future)
 
-### Phase 2 — <!-- short name -->
+- **Goal:** Wire the Phase-1 agent stub into a real LangGraph graph using pytest against a real API key.
+- **Dependencies:** Phase 1 complete.
+- **Gate command:** `uv run pytest tests/integration/ -v` with `ANTHROPIC_API_KEY` in `.env`.
 
-- **Goal:** <!-- FILL IN: next user-testable increment (typically wires a Phase-1 stub into real functionality). -->
-- **Independent slices (parallel build units):**
-  - `slice-a` (backend) — <!-- ...; deps: none -->
-  - `slice-b` (frontend) — <!-- ...; deps: none -->
-- **Key surfaces / files:** <!-- FILL IN -->
-- **Gate command:** <!-- FILL IN: exact runnable command, real LLM/API + production DB driver -->
-- **How the user tests it (handoff seed):** <!-- FILL IN -->
+### Phase 3 — Deploy Template (future)
 
-<!-- Repeat the per-phase block for every phase. -->
+- **Goal:** Add a `terraform/` or deployment manifest for a single GCP VM + Cloud SQL.
+- **Dependencies:** Phase 2.
+- **Gate command:** `cd deploy && terraform plan` (or documented equivalent).
 
+### Phase 4 — Capability Plugin (future)
+
+- **Goal:** Allow `--slot transform_text` or other capability names to swap the stub graph node and prompt template.
+- **Dependencies:** Phase 2.
+- **Gate command:** `python scripts/bootstrap.py my-agent --slot transform_text` produces a different graph node.

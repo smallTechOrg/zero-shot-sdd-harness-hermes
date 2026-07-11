@@ -1,32 +1,48 @@
-# UI
+# UI — `scaffold-agent`
 
-> **Boilerplate status:** Delete this file if the agent has no UI. Otherwise, filled in by the spec-writer sub-agent.
+> Phase 1 is minimal but visually complete.
 
 ---
 
 ## UI Type
 
-<!-- FILL IN: Web dashboard / CLI / chat interface / none -->
+Web chat interface. Served as a Vite dev server in local dev; built assets served by FastAPI in production.
 
 ## Views / Screens
 
-<!-- FILL IN: One section per major view. -->
+### Screen: Chat
 
-### Screen: <!-- Name -->
+**Purpose:** The user types a message and sees the agent reply.
 
-**Purpose:** <!-- what the user does here -->
+**Key elements**
+- Header with project title (placeholder literal "scaffold-agent chat" until capability slot is filled).
+- Message area with user and assistant bubbles.
+- Input row with Send button.
 
-**Key elements:**
-- <!-- element 1 -->
-- <!-- element 2 -->
+**Actions available**
+- User inputs text and presses Enter or clicks Send.
+- Server returns a reply.
+- User sees assistant message appended immediately.
 
-**Actions available:**
-- <!-- action 1 -->
+### Screen: Stubs (Phase 1)
+
+**Purpose:** Show where future screens go.
+**Key elements**
+- Settings panel: labelled `TODO — LLM key, agent slot`
+- History panel: labelled `TODO — run history`
+
+**Actions available**
+- None persistent; purely placeholder.
 
 ## Error States
 
-<!-- FILL IN: How does the UI surface errors and loading states to the user? -->
+- Loading: simple inline text "Thinking…" while awaiting `/api/chat`.
+- Error: inline red banner under input when the request fails (500 / CORS / network).
+- Empty input: input blur validation, inline hint.
 
 ## Tech Stack
 
-<!-- FILL IN: Filled in by spec-writer. E.g., Next.js 15 + React 19 + Tailwind -->
+- React 18 + TypeScript
+- Vite 6
+- Tailwind CSS 3 via CDN or PostCSS (prefer CDN in generated template for zero-config css).
+- No shadcn/ui in Phase 1; keep dependencies minimal.
