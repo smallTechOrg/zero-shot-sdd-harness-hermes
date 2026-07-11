@@ -6,12 +6,13 @@ All git rules that apply to every Claude Code session in this repo.
 
 ## Branch Model
 
-- **`main` is boilerplate-only.** Never commit application code to `main`. Only spec/harness/boilerplate improvements (no app code) reach `main`, via a reviewed PR.
+- **`main` is boilerplate-only — ABSOLUTELY.** Nothing built by a `/zero-shot-build` run — no application code, no generated feature, no phase output — ever reaches `main`. The default branch is reserved for harness/spec/boilerplate improvements only, and those land via a *separate, explicitly-reviewed* PR, never as a side effect of merging a build. If you merge a feature branch and its `--base` is `main`, you have violated this rule.
+- **The build's PR targets `<base>` (the branch it was cut from), NOT `main`.** Open it with `--base "$base"` so the generated app stays isolated on the feature branch and **dogfood output never lands on `main`**. A build that merges to `main` is a failed build — revert it (see below).
 - **Branch every build from the CURRENT HEAD.** Capture where you are first: `base=$(git rev-parse --abbrev-ref HEAD)` — call it `<base>` — then `git checkout -b feature/<slug>-v0.1` from there. Never `git checkout main` first. A build dogfoods the harness version on the branch you are on (e.g. `v0.4.0`, `v1`); branching from `main` would silently test the wrong (stale) harness.
-- **The build's PR targets `<base>` (the branch it was cut from), NOT `main`.** Open it with `--base "$base"` so the PR shows only the generated app — isolated from the harness deltas on `<base>` — and the dogfood output never lands on `main`.
-- All phase commits go to the feature branch, never to `main`
-- When the build is complete, open the PR from the feature branch into `<base>` — do not merge locally
-- If you find yourself on `main` while writing application code, stop immediately, create the feature branch, and continue there
+- All phase commits go to the feature branch, never to `main`.
+- If you find yourself on `main` while writing application code, stop immediately, create the feature branch, and continue there.
+- **Accidental merge to `main`? Revert, don't panic.** If app code reaches `main`, fix it with `git revert <sha>` (never force-push/rewrite shared history) and push. The feature-branch copy remains the canonical source. Document the revert in the PR.
+
 
 ---
 
