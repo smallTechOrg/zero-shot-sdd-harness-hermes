@@ -23,7 +23,16 @@ own branch/PR (`harness/meta-feedback-live`) so it never mixes with app-build PR
 
 ## Open / in-flight feedback (not yet folded into a doc)
 
-- (add new items here as the user speaks)
+- **Confirmed: background `delegate_task` returns at ~95% (iteration cap), skipping the git hard-gate.**
+  During the live music-tutor build, agent-builder hit its iteration cap after the code was complete
+  and verified (pytest 10 passed, server boots, UI builds) but BEFORE committing/pushing/opening the PR.
+  The parent (root session) had to finish the hard gate itself: stash app work off the feedback branch,
+  create `feature/music-tutor-v0.1` from `main`, commit, push, open PR #7. This is exactly the
+  `sub-agent-early-return` failure mode already documented in `references/hermes-pitfalls.md`. It is now
+  CONFIRMED on a real run, not just theoretical. Action: the skill's Stage 2/4 hard-gate wording already
+  covers it ("if a background delegation returns early... the parent finishes those steps"); keep it, and
+  consider lowering the delegation iteration cap risk by giving agent-builder explicit git/gh steps early.
+  (2026-07-11)
 
 ## How to extend this file
 
