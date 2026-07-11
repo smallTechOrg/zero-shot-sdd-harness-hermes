@@ -129,20 +129,50 @@ def render_staff(midi: int, clef: str) -> str:
 RHYTHM_LINE_Y = (BOTTOM_LINE_Y + TOP_MARGIN) / 2.0 + 10.0
 
 
-def _rest_glyph(label: str) -> str:
-    """A simple, legible rest glyph (text) for the given duration label.
+def _rest_glyph(label: str, cx: float, y: float) -> str:
+    """Draw a legible rest SYMBOL (SVG shapes, no text) for the duration.
 
-    Uses a label with a small shape cue rather than a true Bravura glyph so it
-    renders in any font; the *name* is still computed in rhythm.py.
+    Rests are drawn as distinct shapes so the student sees notation, not words.
+    Whole/half are rectangles hung above/below the line; quarter/eighth/
+    sixteenth are a vertical zig-zag stroke with 0/1/2 flags. Computed, never LLM.
     """
-    cue = {
-        "whole": "▬ (whole rest)",
-        "half": "𝄻 (half rest)",
-        "quarter": "𝄼 (quarter rest)",
-        "eighth": "𝄽 (eighth rest)",
-        "sixteenth": "𝄾 (sixteenth rest)",
-    }
-    return cue.get(label, label)
+    if label == "whole":
+        # hangs just below the line (whole rest)
+        return (
+            f'<rect x="{cx - 13:.1f}" y="{y + 3:.1f}" width="26" height="7" '
+            f'fill="#111827"/>'
+        )
+    if label == "half":
+        # sits on top of the line (half rest)
+        return (
+            f'<rect x="{cx - 13:.1f}" y="{y - 10:.1f}" width="26" height="7" '
+            f'fill="#111827"/>'
+        )
+    # quarter / eighth / sixteenth: vertical zig-zag rest + flags
+    flags = {"quarter": 0, "eighth": 1, "sixteenth": 2}[label]
+    body = (
+        f'<path d="M {cx - 9:.1f} {y - 22:.1f} '
+        f'h 18 '                                   # top serif
+        f'L {cx + 7:.1f} {y - 8:.1f} '             # down to mid
+        f'q 0 13 -11 24 '                          # diagonal to bottom-left
+        f'q 9 -3 13 7" '                           # bottom hook curl
+        f'fill="none" stroke="#111827" stroke-width="2.4" '
+        f'stroke-linecap="round" stroke-linejoin="round"/>'
+    )
+    out = [body]
+    if flags >= 1:
+        out.append(
+            f'<path d="M {cx + 9:.1f} {y - 20:.1f} '
+            f'q 13 5 7 22" fill="none" stroke="#111827" stroke-width="2.4" '
+            f'stroke-linecap="round"/>'
+        )
+    if flags >= 2:
+        out.append(
+            f'<path d="M {cx + 9:.1f} {y - 8:.1f} '
+            f'q 13 5 7 22" fill="none" stroke="#111827" stroke-width="2.4" '
+            f'stroke-linecap="round"/>'
+        )
+    return "".join(out)
 
 
 def render_rhythm(label: str, is_rest: bool = False) -> str:
@@ -167,11 +197,7 @@ def render_rhythm(label: str, is_rest: bool = False) -> str:
     )
 
     if is_rest:
-        parts.append(
-            f'<text x="{NOTE_X - 30:.1f}" y="{y + 8:.1f}" '
-            f'font-size="34" font-family="serif" fill="#111827">'
-            f'{_rest_glyph(label)}</text>'
-        )
+        parts.append(_rest_glyph(label, NOTE_X, y))
     else:
         # filled vs open note head
         fill = "#111827" if info["filled"] else "none"
