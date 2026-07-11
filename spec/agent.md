@@ -6,10 +6,9 @@
 
 ## Agent Architecture Pattern
 
-**Chosen:** Single-agent loop (Phase 1) → Graph (Phase 2).
+**Chosen:** Multi-agent supervisor by default, with ReAct worker nodes.
 
-Rationale: Phase 1 must ship a working scaffold kit fast; a single deterministic agent node keeps dependencies small.
-Phase 2 can introduce LangGraph without changing the API contract.
+Rationale: A supervisor graph is the strongest June-2026 starting point. It handles trivial single-node tasks without overhead and scales to specialist workers without changing the outer API contract. The scaffold ships a minimal supervisor with a single worker in Phase 1, and later phases can add specialist workers, planning, reflection, MCP/A2A transport, and optional Expo mobile clients without changing the backend interface.
 
 ## LLM Provider & Model
 

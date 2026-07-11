@@ -72,12 +72,14 @@ scripts/bootstrap.py       ← generator engine (read + substitute + write)
 
 ## Stack
 
-- **Language:** Python 3.11+
+- **Agent framework:** LangGraph-compatible supervisor graph (minimal in Phase 1; extensible to multi-worker, planning, reflection)
+- **LLM provider + model:** Anthropic / `claude-sonnet-4-6` default; Gemini / `gemini-3.1-pro` alternative; OpenRouter fallback
 - **Backend:** FastAPI + Uvicorn
-- **ORM + DB:** SQLAlchemy 2.0 + Alembic + SQLite (dev); DATABASE_URL-switchable to Postgres
-- **Frontend:** Vite + React 18 + TypeScript + Tailwind CSS
-- **LLM integration:** OpenAI-compatible or Anthropic-compatible client optional; stub fallback
-- **Packaging:** `pyproject.toml` + `requirements.txt` in generated backend; `package.json` in generated frontend
+- **Database + ORM:** PostgreSQL + SQLAlchemy 2.0 / Alembic in prod; SQLite in dev via DATABASE_URL switch
+- **Frontend:** React 18 + Vite 6 + TypeScript + Tailwind in `web/`; optional Expo app in `mobile/`
+- **Packaging:** `pyproject.toml` + venv in backend; `package.json` in frontends
+- **Agent harness:** each generated project includes `harness/skills/<slug>/SKILL.md` plus `harness/agents/*.md` stubs for orchestrator, worker, and qa patterns
+- **Protocol surfaces:** MCP server stub and A2A message channel stubs in generated backend
 
 | Key library | Version | Purpose |
 |-------------|---------|---------|
