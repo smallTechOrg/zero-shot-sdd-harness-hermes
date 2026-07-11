@@ -30,7 +30,9 @@ from .db import (
 )
 from .drill import (
     check_answer,
+    check_melody,
     check_phrase,
+    check_rhythm_dictation,
     make_exercise,
     suggest_next_topic,
     topic_for,
@@ -40,6 +42,7 @@ from .schemas import (
     CheckRequest,
     CheckResponse,
     CurriculumTopic,
+    DictationCheckRequest,
     ExerciseOut,
     NextRequest,
     PhraseCheckRequest,
@@ -48,7 +51,13 @@ from .schemas import (
     SuggestOut,
     TeachingOut,
 )
-from .synth import synth_phrase_wav_bytes, synth_wav_bytes
+from .synth import (
+    DEFAULT_BPM,
+    synth_melody_wav_bytes,
+    synth_phrase_wav_bytes,
+    synth_rhythm_wav_bytes,
+    synth_wav_bytes,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -109,8 +118,8 @@ def create_app() -> FastAPI:
         t0 = time.time()
         if not req.clefs or any(c not in ("treble", "bass") for c in req.clefs):
             return api_error("bad_clefs", "clefs must be subset of ['treble','bass']")
-        if req.drill_type not in ("note", "rhythm", "phrase"):
-            return api_error("bad_drill_type", "drill_type must be 'note', 'rhythm', or 'phrase'")
+        if req.drill_type not in ("note", "rhythm", "phrase", "melody", "rhythm-dictation"):
+            return api_error("bad_drill_type", "drill_type must be 'note', 'rhythm', 'phrase', 'melody', or 'rhythm-dictation'")
         ensure_student(req.student_id, req.display_name)
         # ONE Gemini call per drill set (teaching text only).
         teaching = generate_teaching(
@@ -245,10 +254,14 @@ def create_app() -> FastAPI:
         return Response(content=mp3, media_type="audio/mpeg")
 
     # ----------------------------------------------------------------------- #
-    # Phase 3 — Sight-reading & transcription
+    # Phase 3 — Sight-reading & transcription (metronome-backed playback)
     # ----------------------------------------------------------------------- #
     @app.get("/api/phrase/{phrase_id}/audio", response_model=None)
-    async def phrase_audio(phrase_id: str):
+    async def phrase_audio(
+        phrase_id: str,
+        bpm: float = Query(DEFAULT_BPM),
+        lead_in: int = Query(2),
+    ):
         ex = get_exercise_by_id(phrase_id)
         if not ex:
             return api_error("bad_phrase", "unknown phrase_id", 404)
@@ -257,7 +270,8 @@ def create_app() -> FastAPI:
         from .music import phrase as P
 
         phrase = {"clef": ex["clef"], "steps": ex["phrase"]}
-        wav = synth_phrase_wav_bytes(phrase)
+        # Phase 4: also give the sight-reading playback a metronome pulse.
+        wav = synth_phrase_wav_bytes(phrase, bpm=bpm, lead_in=lead_in)
         return Response(content=wav, media_type="audio/wav")
 
     @app.post("/api/phrase/{phrase_id}/check", response_model=None)
@@ -275,6 +289,50 @@ def create_app() -> FastAPI:
         if ex.get("type") != "phrase":
             return api_error("bad_phrase", "exercise is not a phrase", 400)
         result = check_phrase(ex, req.submitted, student_id)
+        return ok(result)
+
+    # ----------------------------------------------------------------------- #
+    # Phase 4 — Writing notation (dictation): melody + rhythm
+    # ----------------------------------------------------------------------- #
+    @app.get("/api/dictation/{dict_id}/audio", response_model=None)
+    async def dictation_audio(
+        dict_id: str,
+        bpm: float = Query(DEFAULT_BPM),
+        lead_in: int = Query(4),
+    ):
+        ex = get_exercise_by_id(dict_id)
+        if not ex:
+            return api_error("bad_dictation", "unknown dictation_id", 404)
+        dtype = ex.get("type")
+        if dtype == "melody" and ex.get("phrase"):
+            melody = {"clef": ex["clef"], "steps": ex["phrase"]}
+            wav = synth_melody_wav_bytes(melody, bpm=bpm, lead_in=lead_in)
+        elif dtype == "rhythm-dictation":
+            pattern = {"steps": ex.get("steps_meta") or []}
+            wav = synth_rhythm_wav_bytes(pattern, bpm=bpm, lead_in=lead_in)
+        else:
+            return api_error("bad_dictation", "exercise is not dictation", 400)
+        return Response(content=wav, media_type="audio/wav")
+
+    @app.post("/api/dictation/{dict_id}/check", response_model=None)
+    async def dictation_check(dict_id: str, req: DictationCheckRequest):
+        ex = None
+        student_id = None
+        for sess in _SESSIONS.values():
+            cur = sess.get("current")
+            if cur and cur["id"] == dict_id:
+                ex = cur
+                student_id = sess["student_id"]
+                break
+        if not ex or not student_id:
+            return api_error("bad_dictation", "unknown dictation_id", 404)
+        dtype = ex.get("type")
+        if dtype == "melody":
+            result = check_melody(ex, req.submitted, student_id)
+        elif dtype == "rhythm-dictation":
+            result = check_rhythm_dictation(ex, req.submitted, student_id)
+        else:
+            return api_error("bad_dictation", "exercise is not dictation", 400)
         return ok(result)
 
     @app.get("/api/mastery", response_model=None)

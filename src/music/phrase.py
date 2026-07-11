@@ -58,7 +58,6 @@ _REST_PROB = 0.25
 
 DURATION_LABELS = list(DURATIONS.keys())
 
-
 # --------------------------------------------------------------------------- #
 # Generation (deterministic, seeded)
 # --------------------------------------------------------------------------- #
@@ -98,6 +97,73 @@ def generate_phrase(
             }
         )
     return {"clef": clef, "steps": steps}
+
+
+def generate_melody(
+    clef: str = "treble",
+    n_steps: int | None = None,
+    allow_rests: bool = False,
+    rng: random.Random | None = None,
+) -> dict:
+    """Build a *melody dictation* phrase — pitched steps the student rewrites.
+
+    Every step carries a real pitch (no rests unless ``allow_rests``), so the
+    melodic-line dictation asks the student to reproduce PITCH + DURATION for
+    each step. The correct sequence is COMPUTED via :func:`correct_transcription`
+    (reused from the shared phrase model). Deterministic given ``rng``.
+    """
+    if clef not in CLEF_RANGE:
+        raise ValueError(f"unknown clef: {clef}")
+    rng = rng or random.Random()
+    if n_steps is None:
+        n_steps = rng.randint(2, 4)
+    n_steps = max(2, min(4, n_steps))
+
+    lo, hi = CLEF_RANGE[clef]
+    candidates = [m for m in range(lo, hi + 1) if is_natural(m)]
+
+    steps: list[dict] = []
+    for _ in range(n_steps):
+        midi = rng.choice(candidates)
+        label = rng.choice(DURATION_LABELS)
+        steps.append(
+            {
+                "midi": midi,
+                "duration_label": label,
+                "is_rest": False,
+            }
+        )
+    return {"clef": clef, "steps": steps}
+
+
+def generate_rhythm_pattern(
+    n_steps: int | None = None,
+    rng: random.Random | None = None,
+) -> dict:
+    """Build a *rhythm dictation* pattern — durations only, no pitch.
+
+    Each step is ``{"midi": None, "duration_label": str, "is_rest": bool}``.
+    The student reproduces the DURATION sequence (a rest is allowed so the
+    pattern can include silent beats). Correctness is COMPUTED per step by
+    :func:`rhythm.check_duration` (duration label match). Deterministic.
+    """
+    rng = rng or random.Random()
+    if n_steps is None:
+        n_steps = rng.randint(2, 4)
+    n_steps = max(2, min(4, n_steps))
+
+    steps: list[dict] = []
+    for _ in range(n_steps):
+        label = rng.choice(DURATION_LABELS)
+        is_rest = rng.random() < _REST_PROB
+        steps.append(
+            {
+                "midi": None,
+                "duration_label": label,
+                "is_rest": is_rest,
+            }
+        )
+    return {"clef": "treble", "steps": steps}
 
 
 # --------------------------------------------------------------------------- #

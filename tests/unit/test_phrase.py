@@ -164,3 +164,68 @@ def test_phrase_svg_note_matches_midi_placement():
 def test_roundtrip_midi_name_inside_phrase():
     for midi in range(60, 80):
         assert name_to_midi(midi_to_name(midi)) == midi
+
+
+# --------------------------------------------------------------------------- #
+# Phase 4 — Writing notation (dictation): melody + rhythm generation + check
+# --------------------------------------------------------------------------- #
+def test_generate_melody_pitched_only():
+    mel = P.generate_melody(clef="treble", rng=random.Random(3))
+    assert 2 <= len(mel["steps"]) <= 4
+    for s in mel["steps"]:
+        assert s["midi"] is not None, "melody steps must be pitched"
+        assert s["is_rest"] is False
+        assert s["duration_label"] in R.duration_labels()
+
+
+def test_generate_melody_deterministic_with_seed():
+    a = P.generate_melody(clef="treble", n_steps=3, rng=random.Random(7))
+    b = P.generate_melody(clef="treble", n_steps=3, rng=random.Random(7))
+    assert a["steps"] == b["steps"]
+
+
+def test_generate_rhythm_pattern_no_pitch():
+    pat = P.generate_rhythm_pattern(rng=random.Random(5))
+    assert 2 <= len(pat["steps"]) <= 4
+    for s in pat["steps"]:
+        assert "duration_label" in s
+        assert s["duration_label"] in R.duration_labels()
+
+
+def test_melody_check_transcription_all_correct():
+    mel = P.generate_melody(clef="treble", n_steps=3, rng=random.Random(11))
+    correct = P.correct_transcription(mel)
+    submitted = [{"name": n, "duration": d} for n, d in correct]
+    res = P.check_transcription(mel, submitted)
+    assert res["correct"] is True
+    assert res["first_wrong_step"] is None
+
+
+def test_melody_check_transcription_wrong_step_flagged():
+    mel = P.generate_melody(clef="treble", n_steps=3, rng=random.Random(13))
+    correct = P.correct_transcription(mel)
+    wrong = [{"name": correct[0][0], "duration": correct[0][1]},
+             {"name": "Z9", "duration": correct[1][1]},
+             {"name": correct[2][0], "duration": correct[2][1]}]
+    res = P.check_transcription(mel, wrong)
+    assert res["correct"] is False
+    assert res["first_wrong_step"] == 1
+
+
+def test_rhythm_dictation_check_per_step():
+    from src.drill import check_rhythm_dictation
+
+    ex = {
+        "type": "rhythm-dictation",
+        "steps_meta": [
+            {"duration_label": "quarter", "is_rest": False},
+            {"duration_label": "eighth", "is_rest": True},
+        ],
+        "clef": "treble",
+    }
+    ok = check_rhythm_dictation(ex, [{"duration": "quarter"}, {"duration": "eighth"}], "stu")
+    assert ok["correct"] is True
+    bad = check_rhythm_dictation(ex, [{"duration": "half"}, {"duration": "eighth"}], "stu")
+    assert bad["correct"] is False
+    assert bad["first_wrong_step"] == 0
+

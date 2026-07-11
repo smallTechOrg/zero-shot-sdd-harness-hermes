@@ -10,7 +10,6 @@ The drill type is selectable ("note" | "rhythm").
 """
 
 from __future__ import annotations
-
 import random
 import time
 import uuid
@@ -36,8 +35,9 @@ from .music.theory import (
     natural_names_in_clef,
 )
 from .scheduler import build_records, default_state, review, select_due
+from .synth import DEFAULT_BPM
 
-DRILL_TYPES = ("note", "rhythm", "phrase")
+DRILL_TYPES = ("note", "rhythm", "phrase", "melody", "rhythm-dictation")
 
 # Monotonic counter so the scheduler rotates coverage across items instead of
 # re-picking the same one (seed must advance per call, not be wall-clock).
@@ -138,6 +138,10 @@ def make_exercise(
         return _make_rhythm_exercise(student_id, now)
     if drill_type == "phrase":
         return _make_phrase_exercise(clefs, now)
+    if drill_type == "melody":
+        return _make_melody_exercise(clefs, now)
+    if drill_type == "rhythm-dictation":
+        return _make_rhythmdict_exercise(clefs, now)
     return _make_note_exercise(student_id, clefs, now)
 
 
@@ -152,21 +156,112 @@ def make_phrase(clef: str = "treble", rng: random.Random | None = None) -> dict:
 
 
 def _make_phrase_exercise(clefs: list[str], now: float) -> dict:
+    """Sight-reading / transcription exercise (Phase 3).
+
+    Returns the rendered phrase SVG + the COMPUTED correct sequence. The answer
+    is included here so the transcription UI can reveal it — correctness is still
+    computed, never LLM.
+    """
+    _ = now
     clef = (clefs or ["treble"])[0]
     phrase = make_phrase(clef=clef)
     steps = phrase["steps"]
-    correct = phrase["correct"]
     return {
         "id": f"phrase_{uuid.uuid4().hex[:12]}",
         "drill_id": None,
         "type": "phrase",
         "clef": clef,
+        "midi": None,
+        "correct_name": "phrase",
         "phrase": steps,
-        "correct": correct,  # list of [name, duration] (COMPUTED)
-        "correct_name": "phrase",  # not a single name; checked per-step
+        "correct": phrase["correct"],  # computed [name, dur] sequence
         "staff_svg": P.render_phrase_svg(phrase),
-        "options": [],  # transcription UI supplies its own controls
+        "options": [],
         "steps": len(steps),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Phase 4 — Writing notation (dictation): melody + rhythm
+# --------------------------------------------------------------------------- #
+def make_melody(clef: str = "treble", rng: random.Random | None = None) -> dict:
+    """Build a melody-dictation exercise: a PLAYED melodic line (pitch +
+    duration per step) the student must reproduce on the staff.
+
+    The correct sequence is COMPUTED from the generated melody via
+    ``P.correct_transcription`` — never the LLM. The answer is NOT returned
+    in the exercise; only the audio + per-step placement metadata.
+    """
+    melody = P.generate_melody(clef=clef, rng=rng)
+    melody["correct"] = P.correct_transcription(melody)
+    return melody
+
+
+def make_rhythm_pattern(rng: random.Random | None = None) -> dict:
+    """Build a rhythm-dictation exercise: a PLAYED duration pattern (no pitch)
+    the student must reproduce on a step grid.
+
+    Correctness is COMPUTED per step via ``R.check_duration`` (duration label
+    match) — never the LLM. Only the audio + per-step metadata is returned.
+    """
+    pattern = P.generate_rhythm_pattern(rng=rng)
+    # the computed correct duration sequence (rest-aware, but the *name* is the
+    # duration label for both notes and rests).
+    correct = [R.name_for(s["duration_label"], s["is_rest"]) for s in pattern["steps"]]
+    pattern["correct"] = correct
+    return pattern
+
+
+def _make_melody_exercise(clefs: list[str], now: float) -> dict:
+    _ = now
+    clef = (clefs or ["treble"])[0]
+    melody = make_melody(clef=clef)
+    # Per-step placement metadata for the UI: a clickable staff + duration picker.
+    # NO answer in the payload — the student must derive it by ear.
+    steps_meta = [
+        {"duration_label": s["duration_label"], "is_rest": False}
+        for s in melody["steps"]
+    ]
+    return {
+        "id": f"melody_{uuid.uuid4().hex[:12]}",
+        "drill_id": None,
+        "type": "melody",
+        "clef": clef,
+        "mode": "melody",
+        "midi": None,
+        "correct_name": "",
+        "phrase": melody["steps"],       # pitched steps -> the UI renders a staff
+        "steps_meta": steps_meta,
+        "steps": len(melody["steps"]),
+        "bpm": DEFAULT_BPM,
+        "staff_svg": P.render_phrase_svg(melody),  # shown AFTER submission (reveal)
+        "options": [],                    # placement UI supplies its own controls
+        "correct": None,                # never sent to the client
+    }
+
+
+def _make_rhythmdict_exercise(clefs: list[str], now: float) -> dict:
+    _ = (now, clefs)
+    pattern = make_rhythm_pattern()
+    steps_meta = [
+        {"duration_label": s["duration_label"], "is_rest": s["is_rest"]}
+        for s in pattern["steps"]
+    ]
+    return {
+        "id": f"rhythm_{uuid.uuid4().hex[:12]}",
+        "drill_id": None,
+        "type": "rhythm-dictation",
+        "clef": "treble",
+        "mode": "rhythm",
+        "midi": None,
+        "correct_name": "",
+        "phrase": None,                 # no pitch -> step grid, not a staff
+        "steps_meta": steps_meta,
+        "steps": len(pattern["steps"]),
+        "bpm": DEFAULT_BPM,
+        "staff_svg": "",
+        "options": [],
+        "correct": None,                # never sent to the client
     }
 
 
@@ -208,11 +303,86 @@ def topic_for(exercise: dict) -> str:
         return f"rhythm:{exercise['label']}"
     if exercise.get("type") == "phrase":
         return "phrase"  # whole phrase is one scheduling item
+    if exercise.get("type") == "melody":
+        return "melody"  # whole melody dictation is one scheduling item
+    if exercise.get("type") == "rhythm-dictation":
+        return "rhythm-dictation"  # whole rhythm dictation is one item
     return f"{exercise['clef']}:{exercise['correct_name']}"
 
 
 def item_id_for(exercise: dict) -> str:
     return topic_for(exercise)
+
+
+def _persist_review(student_id: str, exercise: dict, correct: bool) -> str:
+    topic = topic_for(exercise)
+    record_result(student_id, topic, correct)
+    iid = item_id_for(exercise)
+    prev = get_sched(student_id, iid)
+    state = prev if prev else default_state(iid, time.time())
+    state = review(state, correct, time.time())
+    save_sched(student_id, state)
+    return topic
+
+
+def check_melody(exercise: dict, submitted: list[dict], student_id: str) -> dict:
+    """Verify a melody dictation submission (name + duration per step).
+
+    The verdict is COMPUTED by ``src.music.phrase.check_transcription``
+    against the generated melody — never the LLM. Mastery/scheduling for
+    the whole melody skill is persisted under the ``melody`` topic.
+    """
+    melody = {"clef": exercise["clef"], "steps": exercise["phrase"]}
+    result = P.check_transcription(melody, submitted)
+    topic = _persist_review(student_id, exercise, result["correct"])
+    result["topic"] = topic
+    return result
+
+
+def check_rhythm_dictation(
+    exercise: dict, submitted: list[dict], student_id: str
+) -> dict:
+    """Verify a rhythm-dictation submission (duration per step, no pitch).
+
+    Each submitted step is ``{"duration": str}``; correctness is COMPUTED
+    per step via ``src.music.rhythm.check_duration`` on the generated
+    pattern's duration label. Never the LLM.
+    """
+    pattern_steps = [
+        {"duration_label": s["duration_label"], "is_rest": s.get("is_rest", False)}
+        for s in (exercise.get("steps_meta") or [])
+    ]
+    total = len(pattern_steps)
+    details: list[dict] = []
+    first_wrong: int | None = None
+    for i in range(total):
+        exp_label = pattern_steps[i]["duration_label"]
+        exp_is_rest = pattern_steps[i].get("is_rest", False)
+        sub = submitted[i] if i < len(submitted) else {}
+        got = (sub.get("duration") or "").strip().lower()
+        verdict = R.check_duration(exp_label, got, exp_is_rest)
+        dur_ok = verdict["correct"]
+        details.append(
+            {
+                "duration_ok": dur_ok,
+                "expected": exp_label,
+            }
+        )
+        if first_wrong is None and not dur_ok:
+            first_wrong = i
+    if len(submitted) != total:
+        first_wrong = first_wrong if first_wrong is not None else (
+            len(submitted) if len(submitted) < total else 0
+        )
+    result = {
+        "correct": first_wrong is None and len(submitted) == total,
+        "total_steps": total,
+        "first_wrong_step": first_wrong,
+        "details": details,
+    }
+    topic = _persist_review(student_id, exercise, result["correct"])
+    result["topic"] = topic
+    return result
 
 
 def check_phrase(exercise: dict, submitted: list[dict], student_id: str) -> dict:
