@@ -141,9 +141,12 @@ Phase 1 is the smallest working win: real on the one core path, with clearly-lab
    d. Health-check with retry: `for i in {1..10}; do curl -sf http://localhost:8001/health && break || sleep 2; done` — wait for the server before presenting the gate. If it never responds → route immediately to qa-auditor (boot failure), do not present the URL.
 2. Load the question tool: `clarify` with query `select:clarify` (before asking).
 3. Present the handoff as **phase release notes**: the live URL, what was built this phase, what to click / type / look at, the expected result, which parts are clearly-labelled stubs vs real (a stub must never read as a bug), and what the next phase adds. No run commands in the handoff — the app is already serving.
-4. Ask via `clarify` (two questions in one call):
+4. Ask via `clarify` — **ALWAYS MULTI-SELECT** (the user said *"u should ask multi choice questions not
+   single choice"*). One call, tick all that apply, covering both load-state and the feature checklist:
    - *"Is the app loading at [URL]?"* → **"Yes, I can see it"** / **"No — error or blank page"**
-   - *"Your verdict?"* (multiSelect) → **"It works well"** / **"Output isn't right"** / **"UI feels off"** / **"Something is broken"**
+   - *"What worked?"* (multiSelect) → **"Staff renders"** / **"Audio plays"** / **"Checking correct"** /
+     **"Hints work"** / **"Streaming works"** / **"Reasoning shown"** / **"Tokens shown"** / **"Nothing worked"**
+   Do NOT use a single-choice verdict. If "No — error" or "Nothing worked" is ticked, route to qa-auditor.
 5. Route on their answers:
    - App didn't load → qa-auditor (boot failure), fix, re-present.
    - Any negative verdict → capture what they saw, then delegate to **zero-shot-fix** — pass the user's description, the phase context, the live URL, and any qa-auditor diagnosis already in context (file:line + SPEC/CODE classification) so it can skip re-diagnosis. It owns diagnose → fix → verify → commit + push autonomously, using the **scoped gate** for small CODE fixes (qa-auditor verifies only the changed surface + a real-key smoke call — not the full suite/E2E). When it returns VERIFIED, rebuild + restart the running app and **re-present** the gate. Loop until satisfied.
