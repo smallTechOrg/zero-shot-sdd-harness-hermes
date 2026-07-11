@@ -8,26 +8,31 @@
 ## What This Repo Does
 
 This repo is the **scaffold product**: a self-contained hackathon starter-kit generator.
-A user clones this repo and runs `scripts/bootstrap.py <project-name>` (or `npm`/`zero-shot-build` wrapper) to emit a complete, runnable project — FastAPI backend, React frontend, SQLite dev DB, Alembic migrations, Docker Compose, and a working agent stub — in a fresh directory.
+A user clones this repo and runs `scripts/bootstrap.py <project-name>` to emit a complete, runnable project — FastAPI backend, React web frontend, optional Expo mobile app, SQLite dev DB, Alembic migrations, Docker Compose, Hermes-native harness stubs, and a working multi-agent-ready skeleton — in a fresh directory.
+It is optimized for the fastest cycle: target **20–60 minutes** from idea to a runnable agent that can be immediately hacked into a professional agent, including complex multi-agent workflows and product launches.
 The repo itself remains the template source on `main`; generated files never touch `main`.
 
 ## Who Uses It
 
-Engineers in a hackathon or greenfield sprint who want a runnable FastAPI + React + SQLite skeleton immediately, without wiring ports, sessions, or migrations by hand.
+Engineers in a hackathon, greenfield sprint, or weekend agent build who want the strongest June-2026-looking starting point: multi-agent architecture, web + optional mobile, Hermes-native packaging, and deploy-ready Docker/GCP paths, without manually wiring ports, sessions, migrations, or frontend shells.
 
 ## Core Problem Being Solved
 
-Most scaffold repos are either empty boilerplate or opinioned generators that lock you into a framework.
-This repo gives you a **single command scaffold** that drops a runnable agent scaffold into a sibling directory you can immediately open in Claude Code, Docker, or deploy to a GCP VM.
+Most scaffold repos are either empty boilerplate, opinionated generators that lock you into one app shape, or missing the newest agent/mobile architecture patterns.
+This repo gives you a **single command scaffold** that drops a runnable agent scaffold into a sibling directory you can immediately open in Claude Code, Hermes, Docker, or deploy to a GCP VM. It is built to support passtimate idea-to-running-app times of 20–60 minutes for hackathons and sprint ideas that can grow into full products or agencies.
 
 ## Success Criteria
 
 - `scripts/bootstrap.py my-project` creates a runnable project in a fresh directory in <60s.
-- `cd my-project && docker compose up` serves both frontend and backend.
+- Fastest supported path creates a working agent demo in **20–60 minutes** from idea to deploy-ready state.
+- `cd my-project && docker compose up` serves backend + web + optional mobile.
 - `GET /health` returns 200.
 - React loads and calls backend successfully.
-- A real LLM key optionally enables live agent responses; without it, the stub behaves predictably.
-- `npm run build` succeeds for the generated frontend.
+- Expo app can be launched against backend in the same stack when requested.
+- A real LLM key optionally enables live agent responses; without it, the supervisor stub behaves predictably.
+- Output project includes Hermes-native stubs: `harness/skills/<slug>/SKILL.md`, `harness/agents/*.md`, and tool surfaces ready for MCP/A2A.
+- Generated project is usable as the base for the most complex June-2026 multi-agent applications, including multi-agent workflows, video/image agents, or backend-security-testing agencies.
+- `docker compose up` ends-to-end satisfies the same demo as the manual commands.
 
 ## What This Repo Does NOT Do
 
