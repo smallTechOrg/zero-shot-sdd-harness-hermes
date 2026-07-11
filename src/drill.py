@@ -38,6 +38,16 @@ from .scheduler import build_records, default_state, review, select_due
 
 DRILL_TYPES = ("note", "rhythm")
 
+# Monotonic counter so the scheduler rotates coverage across items instead of
+# re-picking the same one (seed must advance per call, not be wall-clock).
+_SELECT_SEQ = 0
+
+
+def _next_select_seq() -> int:
+    global _SELECT_SEQ
+    _SELECT_SEQ += 1
+    return _SELECT_SEQ
+
 
 def _clef_candidates(clef: str) -> list[int]:
     lo, hi = CLEF_RANGE[clef]
@@ -97,7 +107,7 @@ def _weighted_pick(student_id: str, clef: str) -> int:
 def _scheduled_note_midi(student_id: str, clefs: list[str], now: float) -> tuple[str, int]:
     item_ids = _note_item_ids(student_id, clefs)
     records = _scheduler_records(student_id, item_ids, now)
-    chosen = select_due(records, now, seed=now)
+    chosen = select_due(records, now, seed=_next_select_seq())
     if not chosen:
         clef = random.choice(clefs)
         return clef, _weighted_pick(student_id, clef)
@@ -146,7 +156,7 @@ def _make_note_exercise(student_id: str, clefs: list[str], now: float) -> dict:
 def _make_rhythm_exercise(student_id: str, now: float) -> dict:
     item_ids = [f"rhythm:{label}" for label in R.DURATIONS]
     records = _scheduler_records(student_id, item_ids, now)
-    chosen = select_due(records, now, seed=now) or "rhythm:quarter"
+    chosen = select_due(records, now, seed=_next_select_seq()) or "rhythm:quarter"
     _, label = chosen.split(":", 1)
     is_rest = random.random() < 0.5
     return {

@@ -90,6 +90,23 @@ def test_select_due_round_robins_fresh_items():
     assert len(seen) >= 2  # not always the same first pick
 
 
+def test_select_due_introduces_fresh_before_repeating_seen():
+    # One seen item + several never-seen: scheduler must keep introducing fresh
+    # items instead of looping the already-seen one (regression for the "stuck
+    # on the same rhythm note" bug).
+    recs = [
+        {"item_id": "seen", "box": 0, "streak": 0, "lapses": 0,
+         "due_at": 0.0, "last_seen": 50.0, "last_correct": False},
+        {"item_id": "freshA", "box": 0, "streak": 0, "lapses": 0,
+         "due_at": 0.0, "last_seen": 0.0, "last_correct": False},
+        {"item_id": "freshB", "box": 0, "streak": 0, "lapses": 0,
+         "due_at": 0.0, "last_seen": 0.0, "last_correct": False},
+    ]
+    chosen = S.select_due(recs, now=100.0, seed=1.0)
+    assert chosen != "seen"
+    assert chosen in {"freshA", "freshB"}
+
+
 def test_select_due_empty_returns_none():
     assert S.select_due([], now=0.0) is None
 

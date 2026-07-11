@@ -106,58 +106,45 @@ def is_due(item: dict, now: float) -> bool:
     return item["due_at"] <= now
 
 
-def _num_previously_seen(records: list[dict]) -> int:
-    return sum(1 for r in records if r.get("last_seen", 0.0) > 0.0)
-
-
 def select_due(records: list[dict], now: float, seed: float = 0.0) -> str | None:
     """Pick the next item to review from scheduling records.
 
     Order of precedence (pure, deterministic given ``seed``):
-      1. Items that are due now, prioritised by lowest box (weakest first),
-         then by earliest due_at, with a tiny deterministic tie-break from
-         ``seed`` so we don't always repeat the same item.
-      2. If nothing is due but some items have been seen, pick the lowest box
-         overall (so we always keep the weakest in rotation).
-      3. Brand-new items never seen: round-robin by a deterministic hash of
-         the item_id + seed, so first-pass coverage is even across the set.
+      1. Never-seen items (last_seen == 0) get full first-pass coverage before
+         any re-review — they are rotated evenly so the tutor introduces every
+         item. This is what prevents "stuck on the same note".
+      2. Items due now, prioritised by lowest box (weakest first), earliest
+         due_at, then a deterministic rotate so the same weak item isn't
+         repeated forever.
+      3. Nothing due: rotate over the whole set by lowest box, then rotate.
 
-    ``seed`` is a caller-supplied float (e.g. time or a counter) used only
-    for tie-breaking, never for correctness.
+    ``seed`` is a caller-supplied float (e.g. a monotonic counter / time) used
+    to rotate coverage — NOT for correctness. Callers should pass a value that
+    advances each call (a counter, not a wall-clock that can repeat).
     """
     if not records:
         return None
 
-    seen = [r for r in records if r.get("last_seen", 0.0) > 0.0]
+    def _rotate(cands: list[dict]) -> dict:
+        # Even rotation: index derived from seed, modulo the candidate count,
+        # so successive calls walk the set instead of re-picking the same item.
+        idx = int(round(seed)) % max(1, len(cands))
+        return sorted(cands, key=lambda r: r["item_id"])[idx]
+
     fresh = [r for r in records if r.get("last_seen", 0.0) <= 0.0]
+    if fresh:
+        return _rotate(fresh)["item_id"]
 
-    due = [r for r in seen if is_due(r, now)]
-    if due:
-        due_sorted = sorted(
-            due,
-            key=lambda r: (r["box"], r["due_at"], _hash_tiebreak(r["item_id"], seed)),
-        )
-        return due_sorted[0]["item_id"]
-
-    # Nothing due: keep the weakest known item in rotation.
-    if seen:
-        seen_sorted = sorted(
-            seen,
-            key=lambda r: (r["box"], r["due_at"], _hash_tiebreak(r["item_id"], seed)),
-        )
-        return seen_sorted[0]["item_id"]
-
-    # All brand-new: deterministic round-robin so initial coverage is even.
-    fresh_sorted = sorted(
-        fresh, key=lambda r: (_hash_tiebreak(r["item_id"], seed), r["item_id"])
+    due = [r for r in records if is_due(r, now)]
+    pool = due if due else records
+    chosen = sorted(
+        pool,
+        key=lambda r: (r["box"], r["due_at"], r["item_id"]),
     )
-    return fresh_sorted[0]["item_id"]
-
-
-def _hash_tiebreak(s: str, seed: float) -> float:
-    """Deterministic float in [0, 1) from a string + seed (no randomness)."""
-    h = hash((s, round(seed * 1000))) & 0xFFFFFFFF
-    return h / 0xFFFFFFFF
+    # rotate within the weakest box bucket so we don't loop one item
+    weakest_box = chosen[0]["box"]
+    bucket = [r for r in chosen if r["box"] == weakest_box]
+    return _rotate(bucket)["item_id"]
 
 
 def build_records(
