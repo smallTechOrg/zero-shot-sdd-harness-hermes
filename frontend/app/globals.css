@@ -1,6 +1,16 @@
 @import "tailwindcss";
 @source "../";
 
+/* Bravura (SMuFL, OFL-licensed) — real music-notation glyphs. Vendored so
+   rests/clefs/noteheads render as correct notation, not system-font tofu. */
+@font-face {
+  font-family: "Bravura";
+  src: url("/app/fonts/Bravura.woff") format("woff");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
 html,
 body {
   margin: 0;

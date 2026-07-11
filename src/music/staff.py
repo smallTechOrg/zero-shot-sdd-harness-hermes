@@ -1,8 +1,12 @@
 """Deterministic staff notation SVG renderer.
 
-Produces a self-contained SVG string for a single note on a given clef.
-Position is computed from :func:`src.music.theory.staff_step` — no LLM
-involvement. Usable in the browser UI directly (returns an <svg> string).
+Produces a self-contained SVG string for a single note / rhythm symbol. Position
+is computed from :func:`src.music.theory.staff_step` — no LLM involvement.
+
+Glyphs (clefs, rests, flags) use the **Bravura SMuFL font** (OFL-licensed, vendored
+at frontend/public/fonts/Bravura.woff and loaded in globals.css via @font-face) so
+they render as *correct* notation in any browser. Noteheads and stems are drawn as
+SVG primitives (their shapes are simple and exact). The LLM is never involved.
 """
 
 from __future__ import annotations
@@ -24,12 +28,32 @@ LEFT = 40.0
 NOTE_X = 250.0
 STAFF_WIDTH = 380.0
 
+# Unicode musical symbols for clefs (standard Unicode, drawn by Bravura).
 CLEF_GLYPH = {
     "treble": "\U0001D11E",  # 𝄞
     "bass": "\U0001D122",    # 𝄢
 }
-CLEF_FONT_SIZE = {"treble": 74, "bass": 56}
-CLEF_Y = {"treble": 132, "bass": 120}
+CLEF_FONT_SIZE = {"treble": 78, "bass": 58}
+CLEF_Y = {"treble": 138, "bass": 122}
+
+# SMuFL Private-Use-Area codepoints for rests + flags (rendered by Bravura).
+# NOTE: these are in the U+E4xx / U+E2xx PUA, NOT the U+1D4xx math plane.
+REST_GLYPH = {
+    "whole": "\uE4E3",     # restWhole
+    "half": "\uE4E4",      # restHalf
+    "quarter": "\uE4E5",   # restQuarter
+    "eighth": "\uE4E6",    # restEighth
+    "sixteenth": "\uE4E7", # restSixteenth
+}
+FLAG_GLYPH = {
+    "eighth": "\uE240",    # flag8thUp
+    "sixteenth": "\uE241", # flag16thUp
+}
+
+# Font size (px) to draw a rest glyph so it reads at staff scale.
+REST_FONT_SIZE = {"whole": 30, "half": 30, "quarter": 42, "eighth": 42, "sixteenth": 42}
+# Vertical placement of the rest glyph's baseline so it sits correctly on the line.
+REST_Y = {"whole": 122, "half": 103, "quarter": 116, "eighth": 116, "sixteenth": 116}
 
 
 def _line_ys() -> list[float]:
@@ -86,10 +110,10 @@ def render_staff(midi: int, clef: str) -> str:
             f'y2="{ly:.1f}" stroke="#1f2937" stroke-width="1.4"/>'
         )
 
-    # clef glyph
+    # clef glyph (Bravura)
     parts.append(
         f'<text x="{LEFT - 6:.1f}" y="{CLEF_Y[clef]:.1f}" '
-        f'font-family="serif" font-size="{CLEF_FONT_SIZE[clef]}" '
+        f'font-family="Bravura" font-size="{CLEF_FONT_SIZE[clef]}" '
         f'fill="#1f2937">{CLEF_GLYPH[clef]}</text>'
     )
 
@@ -98,19 +122,14 @@ def render_staff(midi: int, clef: str) -> str:
 
     # stem (up below middle line step 4, down above)
     stem_up = step < 4
-    if stem_up:
-        stem = (
-            f'<line x1="{NOTE_X + 9:.1f}" y1="{y:.1f}" x2="{NOTE_X + 9:.1f}" '
-            f'y2="{y - 34:.1f}" stroke="#1f2937" stroke-width="1.6"/>'
-        )
-    else:
-        stem = (
-            f'<line x1="{NOTE_X - 9:.1f}" y1="{y:.1f}" x2="{NOTE_X - 9:.1f}" '
-            f'y2="{y + 34:.1f}" stroke="#1f2937" stroke-width="1.6"/>'
-        )
-    parts.append(stem)
+    sx = NOTE_X + 9 if stem_up else NOTE_X - 9
+    sy_top = y - 34 if stem_up else y + 34
+    parts.append(
+        f'<line x1="{sx:.1f}" y1="{y:.1f}" x2="{sx:.1f}" y2="{sy_top:.1f}" '
+        f'stroke="#1f2937" stroke-width="1.6"/>'
+    )
 
-    # note head (slightly tilted ellipse)
+    # note head (slightly tilted filled ellipse — exact shape)
     parts.append(
         f'<g transform="rotate(-18 {NOTE_X:.1f} {y:.1f})">'
         f'<ellipse cx="{NOTE_X:.1f}" cy="{y:.1f}" rx="9" ry="6.6" '
@@ -123,63 +142,17 @@ def render_staff(midi: int, clef: str) -> str:
 
 # ---- Rhythm / duration rendering -------------------------------------------------
 # A rhythm symbol (note or rest) is drawn on a single staff line centred on the
-# staff so the student focuses on the *shape* (open vs filled head, flags), not
-# the pitch. Duration correctness is computed in src.music.rhythm — never LLM.
+# staff so the student focuses on the *shape* (open vs filled head, flags, rest
+# glyph), not the pitch. Duration correctness is computed in src.music.rhythm.
 
 RHYTHM_LINE_Y = (BOTTOM_LINE_Y + TOP_MARGIN) / 2.0 + 10.0
 
 
-def _rest_glyph(label: str, cx: float, y: float) -> str:
-    """Draw a legible rest SYMBOL (SVG shapes, no text) for the duration.
-
-    Rests are drawn as distinct shapes so the student sees notation, not words.
-    Whole/half are rectangles hung above/below the line; quarter/eighth/
-    sixteenth are a vertical zig-zag stroke with 0/1/2 flags. Computed, never LLM.
-    """
-    if label == "whole":
-        # hangs just below the line (whole rest)
-        return (
-            f'<rect x="{cx - 13:.1f}" y="{y + 3:.1f}" width="26" height="7" '
-            f'fill="#111827"/>'
-        )
-    if label == "half":
-        # sits on top of the line (half rest)
-        return (
-            f'<rect x="{cx - 13:.1f}" y="{y - 10:.1f}" width="26" height="7" '
-            f'fill="#111827"/>'
-        )
-    # quarter / eighth / sixteenth: vertical zig-zag rest + flags
-    flags = {"quarter": 0, "eighth": 1, "sixteenth": 2}[label]
-    body = (
-        f'<path d="M {cx - 9:.1f} {y - 22:.1f} '
-        f'h 18 '                                   # top serif
-        f'L {cx + 7:.1f} {y - 8:.1f} '             # down to mid
-        f'q 0 13 -11 24 '                          # diagonal to bottom-left
-        f'q 9 -3 13 7" '                           # bottom hook curl
-        f'fill="none" stroke="#111827" stroke-width="2.4" '
-        f'stroke-linecap="round" stroke-linejoin="round"/>'
-    )
-    out = [body]
-    if flags >= 1:
-        out.append(
-            f'<path d="M {cx + 9:.1f} {y - 20:.1f} '
-            f'q 13 5 7 22" fill="none" stroke="#111827" stroke-width="2.4" '
-            f'stroke-linecap="round"/>'
-        )
-    if flags >= 2:
-        out.append(
-            f'<path d="M {cx + 9:.1f} {y - 8:.1f} '
-            f'q 13 5 7 22" fill="none" stroke="#111827" stroke-width="2.4" '
-            f'stroke-linecap="round"/>'
-        )
-    return "".join(out)
-
-
 def render_rhythm(label: str, is_rest: bool = False) -> str:
-    """Return an SVG string rendering a rhythm symbol (note head + stem + flags
-    or a rest glyph) for the given duration label. Computed, never LLM."""
+    """Return an SVG string rendering a rhythm symbol (note or rest) for the
+    given duration label. Computed, never LLM. Real SMuFL glyphs for rests/flags."""
     if label not in DURATIONS:
-        raise ValueError(f"unknown duration label: {label!r}")
+        raise ValueError(f"unknown duration label: {label}")
     info = DURATIONS[label]
     y = RHYTHM_LINE_Y
 
@@ -197,39 +170,41 @@ def render_rhythm(label: str, is_rest: bool = False) -> str:
     )
 
     if is_rest:
-        parts.append(_rest_glyph(label, NOTE_X, y))
+        parts.append(
+            f'<text x="{NOTE_X:.1f}" y="{REST_Y[label]:.1f}" '
+            f'text-anchor="middle" font-family="Bravura" '
+            f'font-size="{REST_FONT_SIZE[label]}" fill="#111827">'
+            f'{REST_GLYPH[label]}</text>'
+        )
     else:
-        # filled vs open note head
+        # filled vs open note head (open = whole/half)
         fill = "#111827" if info["filled"] else "none"
-        stroke = "#111827"
         parts.append(
             f'<g transform="rotate(-18 {NOTE_X:.1f} {y:.1f})">'
             f'<ellipse cx="{NOTE_X:.1f}" cy="{y:.1f}" rx="9" ry="6.6" '
-            f'fill="{fill}" stroke="{stroke}" stroke-width="1.6"/></g>'
+            f'fill="{fill}" stroke="#111827" stroke-width="1.6"/></g>'
         )
-        # stem (whole notes have none; half/quarter/eighth/sixteenth do)
+        # stem (whole notes have none)
         if label != "whole":
-            stem_up = True  # always up for clarity in the rhythm drill
-            dirn = -1 if stem_up else 1
+            stem_up = True
+            sy_top = y - 34 if stem_up else y + 34
+            sx = NOTE_X + 9 if stem_up else NOTE_X - 9
             parts.append(
-                f'<line x1="{NOTE_X + 9:.1f}" y1="{y:.1f}" '
-                f'x2="{NOTE_X + 9:.1f}" y2="{y + 34 * dirn:.1f}" '
+                f'<line x1="{sx:.1f}" y1="{y:.1f}" x2="{sx:.1f}" y2="{sy_top:.1f}" '
                 f'stroke="#111827" stroke-width="1.6"/>'
             )
-            # flags for eighth / sixteenth
+            # flag(s) via real Bravura glyph at the stem top
             if info["flags"] >= 1:
-                fy = y + 34 * dirn
                 parts.append(
-                    f'<path d="M {NOTE_X + 9:.1f} {fy:.1f} '
-                    f'q 14 6 10 22" fill="none" stroke="#111827" '
-                    f'stroke-width="2.2"/>'
+                    f'<text x="{sx:.1f}" y="{(sy_top + 4):.1f}" '
+                    f'font-family="Bravura" font-size="30" fill="#111827">'
+                    f'{FLAG_GLYPH["eighth"]}</text>'
                 )
             if info["flags"] >= 2:
-                fy = y + 34 * dirn + 14
                 parts.append(
-                    f'<path d="M {NOTE_X + 9:.1f} {fy:.1f} '
-                    f'q 14 6 10 22" fill="none" stroke="#111827" '
-                    f'stroke-width="2.2"/>'
+                    f'<text x="{sx:.1f}" y="{(sy_top + 20):.1f}" '
+                    f'font-family="Bravura" font-size="30" fill="#111827">'
+                    f'{FLAG_GLYPH["sixteenth"]}</text>'
                 )
 
     parts.append("</svg>")

@@ -8,6 +8,7 @@ influenced by the LLM.
 from src.music import rhythm as R
 from src.music import staff as S
 from src.music import theory as T  # noqa: F401  (ensure theory still importable)
+from src.music.staff import FLAG_GLYPH, REST_GLYPH
 
 
 def test_duration_labels_are_fixed_set():
@@ -82,14 +83,23 @@ def test_whole_note_has_no_stem():
 
 def test_eighth_note_has_flag():
     svg = S.render_rhythm("eighth", is_rest=False)
-    # eighth notes render a flag path
-    assert "<path" in svg
+    # eighth notes render a real Bravura flag glyph (a <text> with the SMuFL
+    # codepoint), not a hand-drawn <path>.
+    assert "font-family=\"Bravura\"" in svg
+    assert FLAG_GLYPH["eighth"] in svg  # real SMuFL flag codepoint present
 
 
 def test_rest_glyph_renders():
     svg = S.render_rhythm("quarter", is_rest=True)
     assert svg.startswith("<svg")
-    assert "rest" in svg.lower() or "𝄼" in svg or "quarter rest" in svg
+    # real Bravura rest glyph (SMuFL codepoint) — never literal words like
+    # "quarter rest", and no <text> that just spells the duration name.
+    assert REST_GLYPH["quarter"] in svg
+    assert "rest" not in svg.lower().split("aria-label")[0] or "rest:" in svg
+    # ensure no English duration words leak into visible markup
+    for word in ("whole rest", "half rest", "quarter rest", "eighth rest",
+                 "sixteenth rest"):
+        assert word not in svg.lower()
 
 
 def test_llm_not_involved_in_correctness():
