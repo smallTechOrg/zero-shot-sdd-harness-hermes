@@ -25,5 +25,6 @@ Durable, generic lessons from real `/zero-shot-build` runs. Only things that cha
 - **Symptom:** calling the LLM once per generated line/token silently burns the user's monthly spend cap (which backoff can't fix).
 - **Fix:** generate the whole artifact in ONE call, then parse and stream the pieces downstream. Applies to any streaming/agentic build.
 
-### 7. At the human gate, ASK with a MULTI-SELECT checklist
-- **Fix:** the testing gate is ONE `clarify` call, **always multi-select, never single-choice** — one option per feature the phase shipped (from its success criteria) plus a "Nothing worked" escape. Tick-all-that-apply pinpoints failures in one answer. State only the URL + one-line status, then ask; put detail in notes, not the chat.
+### 7. At the human gate, the ROOT SESSION owns the run — ASK with a MULTI-SELECT checklist
+- **Symptom:** the gate fired a `clarify` "does it work?" but never launched the server or gave a URL, so the user ended up starting/killing processes and hunting ports. The run was bounced back to the user.
+- **Fix:** before the checklist, the root session MUST launch the server (explicit interpreter, **free port**, retry if busy), smoke-test live (health + new endpoints + a real in-browser render with **0 console errors** — the root session can use its own browser), then hand **ONE live URL** + one-line status. Only THEN ask the multi-select `clarify` (never single-choice) — one option per feature shipped plus a "Nothing worked" escape. If it won't boot, that's a BLOCKER, not a question. The user must never run a terminal command to test. (From PR #8.)
