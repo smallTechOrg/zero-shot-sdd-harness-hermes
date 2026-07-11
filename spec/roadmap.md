@@ -92,17 +92,40 @@ Correctness rule upheld: all answers (note names + durations) are computed in `s
 notation glyphs; MIDI-driven synth audio; computed correctness. Future: MusicXML
 export so tunes open in MuseScore/Dorico/Sibelius/Flat.
 
-### Phase 4 — Writing notation (planned)
+### Phase 4 — Writing notation: melody + rhythm dictation (SHIPPED in v0.4)
 
-> Reverse of Phase 3: the tutor plays / describes a melody and the student *writes* it
-> as notation (places notes on the staff). Serves "write notation for original tunes".
+> Reverse of Phase 3: the tutor PLAYS a short phrase (with a metronome lead-in +
+> steady tempo) and the student *writes* it back as notation. Two dictation modes:
+> melody (place pitch + duration per step) and rhythm (place duration per step).
+> Plus a **metronome** (lead-in clicks + steady tempo, BPM shown) folded into all
+> playback — because judging duration by ear needs a pulse.
 
-### Phase 5 — Produce beats & melodies (planned)
+1. **Melody dictation:** hear a 2–4 step melodic line → pick note name + duration per
+   step. Correctness computed via `phrase.check_transcription`.
+2. **Rhythm dictation:** hear a duration pattern (rests allowed) → pick the duration
+   per step. Correctness computed per step via `rhythm.check_duration`.
+3. **Metronome:** `src/synth.py` adds a click track — lead-in clicks then the phrase/
+   rhythm plays at the same BPM. Used by both the Sight-reading (Phase 3) and the new
+   dictation playback. BPM surfaced in the UI.
+4. New endpoints `GET /api/dictation/{id}/audio` (metronome-backed) and
+   `POST /api/dictation/{id}/check`; `drill_type` gains `melody` + `rhythm-dictation`.
+   Frontend (`frontend/app/dictation.tsx`): per-step note/duration pickers + reveal.
 
-> Compose original tunes: sequence drums/beats + a melody, hear it back, and export the
-> notation. Closes the "produce beats and melodies and write notations for original
-> tunes" goal.
+**Standards:** SMuFL (Bravura) glyphs; MIDI synth; computed correctness. Export (MusicXML +
+MIDI) deferred to Phase 5.
+
+### Phase 4.5 — Transpose any melody (planned)
+
+> Show a melody; shift it up/down by N steps or to a target key; see + hear both the
+> original and the transposed version. Serves "transpose any melody".
+
+### Phase 5 — Compose + produce beats, export (planned)
+
+> Build an original melody on the staff, hear it, produce a beat/drum track, and
+> **export MusicXML + MIDI** so the tune opens in MuseScore/Dorico/Flat or any DAW.
+> Closes "transpose any melody but also compose" + "everything exportable as MusicXML
+> and MIDI".
 
 > (Old roadmap stubs — chords/harmony drills, chord-progression, multi-student studio,
-> PDF/animation — are sub-features that can slot into Phases 3–5 as needed; not a fixed plan.)
+> PDF/animation — are sub-features that can slot into Phases 4.5–5 as needed; not a fixed plan.)
 

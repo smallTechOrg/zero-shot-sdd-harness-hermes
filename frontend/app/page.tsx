@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Staff from "./staff";
 import PhraseTranscription from "./phrase";
+import Dictation, { DictStep } from "./dictation";
 
 // ---- types mirror src/schemas.py (server is source of truth) ----
 interface Exercise {
   id: string;
   drill_id?: string;
-  type: string; // "note" | "rhythm" | "phrase"
+  type: string; // "note" | "rhythm" | "phrase" | "melody" | "rhythm-dictation"
   midi: number | null;
   correct_name: string;
   clef: string | null;
@@ -18,6 +19,9 @@ interface Exercise {
   options: string[];
   phrase?: { midi: number | null; duration_label: string; is_rest: boolean }[] | null;
   steps?: number | null;
+  steps_meta?: { duration_label: string; is_rest: boolean }[] | null;
+  mode?: string | null;
+  bpm?: number | null;
 }
 
 interface PhraseStep {
@@ -80,12 +84,12 @@ async function jget<T>(url: string): Promise<T> {
   return data.data as T;
 }
 
-// Genuinely-later stubs (Phase 4+). Clearly non-functional, never a bug.
+// Genuinely-later stubs (Phase 4.5+). Clearly non-functional, never a bug.
 const STUBS = [
-  "Chords drill",
-  "Progressions",
+  "Transpose any melody",
+  "Compose + produce beats",
+  "MusicXML / MIDI export",
   "Multi-student studio",
-  "PDF / image export",
   "Animated full-piece playback",
 ];
 
@@ -102,7 +106,7 @@ function topicMastery(t: DashTopic): number {
 export default function Page() {
   const [studentId] = useState("student-1");
   const [clefs, setClefs] = useState<string[]>(["treble"]);
-  const [drillType, setDrillType] = useState<"note" | "rhythm" | "phrase">("note");
+  const [drillType, setDrillType] = useState<"note" | "rhythm" | "phrase" | "melody" | "rhythm-dictation">("note");
   const [drillId, setDrillId] = useState<string | null>(null);
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [teaching, setTeaching] = useState<Teaching | null>(null);
@@ -119,6 +123,7 @@ export default function Page() {
 
   const isRhythm = drillType === "rhythm";
   const isPhrase = drillType === "phrase";
+  const isDictation = drillType === "melody" || drillType === "rhythm-dictation";
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -174,6 +179,27 @@ export default function Page() {
     } catch {
       setPlaying(false);
       setError("Phrase audio unavailable — check your browser sound.");
+    }
+  }, []);
+
+  const playDictation = useCallback(async (dictId: string) => {
+    if (!dictId) return;
+    setPlaying(true);
+    try {
+      const r = await fetch(`${API}/dictation/${dictId}/audio`);
+      if (!r.ok) throw new Error("audio failed");
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = new Audio(url);
+      audioRef.current = a;
+      await a.play();
+      a.onended = () => {
+        setPlaying(false);
+        URL.revokeObjectURL(url);
+      };
+    } catch {
+      setPlaying(false);
+      setError("Dictation audio unavailable — check your browser sound.");
     }
   }, []);
 
@@ -269,6 +295,84 @@ export default function Page() {
       initTranscription(exercise.steps);
     }
   }, [exercise, initTranscription]);
+
+  // Dictation (writing notation): one {name?, duration} per step, in order.
+  const [dictation, setDictation] = useState<DictStep[]>([]);
+  const [dictResult, setDictResult] = useState<{
+    correct: boolean;
+    first_wrong_step: number | null;
+    total_steps: number;
+    details: { name_ok?: boolean; duration_ok: boolean; expected: any }[];
+  } | null>(null);
+
+  const initDictation = useCallback((n: number) => {
+    setDictation(Array.from({ length: n }, () => ({ name: "", duration: "" })));
+    setDictResult(null);
+  }, []);
+
+  useEffect(() => {
+    if (isDictation && exercise?.steps) {
+      initDictation(exercise.steps);
+    }
+  }, [exercise, isDictation, initDictation]);
+
+  const setDictStep = useCallback((i: number, patch: Partial<DictStep>) => {
+    setDictation((prev) => {
+      const copy = prev.slice();
+      copy[i] = { ...copy[i], ...patch };
+      return copy;
+    });
+  }, []);
+
+  const submitDictation = useCallback(async () => {
+    if (!exercise) return;
+    setFeedback(null);
+    try {
+      const res = await jpost<{
+        correct: boolean;
+        first_wrong_step: number | null;
+        total_steps: number;
+        details: { name_ok?: boolean; duration_ok: boolean; expected: any }[];
+      }>(`${API}/dictation/${exercise.id}/check`, { submitted: dictation });
+      setDictResult(res);
+      if (res.correct) {
+        setFeedback({ kind: "correct", msg: "Correct! You notated the whole phrase." });
+        speak(exercise.id, "Correct! You notated the whole phrase.");
+        loadDashboard();
+        setTimeout(() => nextNote(), 1600);
+      } else {
+        setFeedback({
+          kind: "wrong",
+          msg: `Step ${(res.first_wrong_step ?? 0) + 1} is wrong — check the highlighted row.`,
+        });
+        loadDashboard();
+      }
+    } catch (e: any) {
+      setError(e.message || "Dictation check failed");
+    }
+  }, [exercise, dictation, speak, nextNote, loadDashboard]);
+
+  const revealDictation = useCallback(() => {
+    // Reveal the computed answer from the rendered phrase metadata (client-side
+    // mirror, NEVER used for correctness — the server is the source of truth).
+    if (!exercise) return;
+    const names =
+      exercise.phrase?.map((s) =>
+        s.is_rest || s.midi === null ? "rest" : midiToNameLocal(s.midi)
+      ) ?? [];
+    const parts =
+      exercise.mode === "rhythm"
+        ? (exercise.steps_meta ?? []).map((s) => s.duration_label)
+        : names.map(
+            (nm, i) => `${nm} (${exercise.phrase![i].duration_label})`
+          );
+    setFeedback({
+      kind: "wrong",
+      msg: "Answer — " + parts.map((p, i) => `step ${i + 1}: ${p}`).join(" · "),
+    });
+    speak(exercise.id, "The answer is: " + names.join(", "));
+    setTimeout(() => nextNote(), 2400);
+  }, [exercise, speak, nextNote]);
 
   const setStep = useCallback((i: number, field: keyof PhraseStep, value: string) => {
     setTranscription((prev) => {
@@ -394,6 +498,8 @@ export default function Page() {
     ? "which duration is this?"
     : isPhrase
     ? "transcribe the phrase, step by step"
+    : isDictation
+    ? "listen, then write the notation step by step"
     : "which note is this?";
 
   return (
@@ -429,7 +535,7 @@ export default function Page() {
       <div className="mb-6 flex flex-wrap items-center gap-3">
         {/* Drill type */}
         <div className="flex gap-2">
-          {(["note", "rhythm", "phrase"] as const).map((t) => (
+          {(["note", "rhythm", "phrase", "melody", "rhythm-dictation"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setDrillType(t)}
@@ -439,12 +545,12 @@ export default function Page() {
                   : "bg-slate-200 text-slate-600"
               }`}
             >
-              {t === "note" ? "Note naming" : t === "rhythm" ? "Rhythm / duration" : "Sight-reading"}
+              {t === "note" ? "Note naming" : t === "rhythm" ? "Rhythm / duration" : t === "phrase" ? "Sight-reading" : t === "melody" ? "Write melody" : "Write rhythm"}
             </button>
           ))}
         </div>
         {/* Clefs (note drills only) */}
-        {!isRhythm && !isPhrase && (
+        {!isRhythm && !isPhrase && !isDictation && (
           <div className="flex gap-2">
             {(["treble", "bass"] as const).map((c) => (
               <button
@@ -491,6 +597,15 @@ export default function Page() {
             {playing ? "🔊 Playing…" : "🔊 Play phrase"}
           </button>
         )}
+        {exercise && isDictation && (
+          <button
+            onClick={() => playDictation(exercise.id)}
+            disabled={playing}
+            className="rounded-lg border border-slate-300 px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+          >
+            {playing ? "🔊 Playing…" : "🔊 Play + metronome"}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -508,6 +623,8 @@ export default function Page() {
             ? " A rhythm symbol will appear — name its duration."
             : isPhrase
             ? " A short phrase appears on the staff — play it, then transcribe each step (note name + duration)."
+            : isDictation
+            ? " You'll hear a phrase with a metronome — write it back, step by step (note + duration)."
             : " A note will appear on the staff and play its sound."}
         </div>
       )}
@@ -520,7 +637,7 @@ export default function Page() {
               {isRhythm ? "rhythm" : `${exercise.clef} clef`} · {prompt}
             </p>
 
-            {/* Answer buttons */}
+            {/* Answer / placement UI */}
             {isPhrase ? (
               <PhraseTranscription
                 steps={exercise.steps ?? (exercise.phrase?.length || 0)}
@@ -530,6 +647,18 @@ export default function Page() {
                 onSubmit={submitPhrase}
                 correctName={exercise.correct_name}
                 onReveal={revealPhrase}
+              />
+            ) : isDictation ? (
+              <Dictation
+                mode={exercise.mode === "rhythm" ? "rhythm" : "melody"}
+                steps={exercise.steps ?? 0}
+                stepsMeta={exercise.steps_meta ?? []}
+                bpm={exercise.bpm ?? 80}
+                value={dictation}
+                result={dictResult}
+                onChange={setDictStep}
+                onSubmit={submitDictation}
+                onReveal={revealDictation}
               />
             ) : (
               <div className="mt-4 grid grid-cols-3 gap-2">

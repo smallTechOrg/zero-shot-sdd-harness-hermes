@@ -56,12 +56,31 @@ def topic_blocks(clefs: list[str] | None = None) -> dict[str, dict]:
         "goal": ("Transcribe a short notated phrase — note name + duration per "
                  "step, in order."),
     }
+    # Phase 4: writing notation (dictation) — melody + rhythm each one item.
+    blocks["melody"] = {
+        "id": "melody",
+        "label": "Melody dictation (write the notes)",
+        "type": "melody",
+        "clefs": clefs,
+        "items": ["melody"],
+        "goal": ("Listen to a short melodic line with a metronome pulse, then "
+                 "place each note's pitch + duration on the staff."),
+    }
+    blocks["rhythm-dictation"] = {
+        "id": "rhythm-dictation",
+        "label": "Rhythm dictation (write the durations)",
+        "type": "rhythm-dictation",
+        "clefs": clefs,
+        "items": ["rhythm-dictation"],
+        "goal": ("Listen to a rhythm pattern with a metronome pulse, then "
+                 "place each duration (and rest) on the step grid."),
+    }
     return blocks
 
 
 def topic_order() -> list[str]:
     """A sensible learning order across the curriculum (used by /suggest)."""
-    return ["note-treble", "note-bass", "rhythm", "phrase"]
+    return ["note-treble", "note-bass", "rhythm", "phrase", "melody", "rhythm-dictation"]
 
 
 def item_topic(item_id: str) -> str | None:

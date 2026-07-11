@@ -21,6 +21,15 @@ class PhraseCheckRequest(BaseModel):
     submitted: list[dict] = Field(min_length=1)
 
 
+class DictationCheckRequest(BaseModel):
+    """A dictation submission: one {name?, duration} per step, in order.
+
+    Melody dictation uses {name, duration} per step (reuses the phrase
+    shape). Rhythm dictation uses {duration} per step (no pitch).
+    """
+    submitted: list[dict] = Field(min_length=1)
+
+
 class NextRequest(BaseModel):
     drill_id: str
     student_id: str
@@ -49,6 +58,11 @@ class ExerciseOut(BaseModel):
     phrase: list[dict] | None = None
     steps: int | None = None
     correct: list | None = None  # computed [name, dur] sequence (Phase 3)
+    # Phase 4: writing notation (dictation) — metadata for the placement UI;
+    # the answer is NOT sent to the client (correct=None for these types).
+    steps_meta: list[dict] | None = None  # per-step placement metadata
+    mode: str | None = None  # "melody" | "rhythm"
+    bpm: float | None = None
 
 
 class StartResponse(BaseModel):
