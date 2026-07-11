@@ -64,6 +64,16 @@ Self-taught players can perform but cannot read notation. Existing apps quiz wit
   5. Open the **Reasoning & tokens** panel → see Gemini's one-call teaching text + token counts.
   6. **Stubs (clearly labelled, non-functional):** Chords, Rhythm tapping, Progressions, Multi-student, PDF export, Animated piece — all show "Phase 2 — coming soon".
 
-### Phase 2 — Adaptive Spacing, Rhythm & Topics (planned)
+### Phase 2 — Adaptive Spacing, Rhythm & Topics (SHIPPED)
 
-> Delivers ≥3 capabilities: (1) true spaced-repetition scheduling from mastery state, (2) rhythm/duration naming drill, (3) proactive next-topic suggestion UI + per-topic progress dashboard. Wires the labelled stubs above into real features. *Not built in this handoff.*
+Delivers 3 capabilities, all built and verified (37 tests pass, live in-browser):
+
+1. **True spaced-repetition scheduling** — `src/scheduler.py` (pure, deterministic): Leitner boxes + due-time spacing + SM-2-lite promotion (box≥3 & streak≥3 graduates). `select_due` is weakest-due-first with a deterministic tie-break; state persists in the SQLite `sched` table (`src/db.py`). Wired into `src/drill.py` next-item selection.
+2. **Rhythm / duration naming drill** — `src/music/rhythm.py` (pure, computed correctness) + `staff.render_rhythm` (note head/stem/flags or rest glyph). Selectable via `drill_type="rhythm"` on `/api/exercises/start` and `/api/notes/next`; rhythm items have no pitch audio. The correct duration is computed, never LLM-guessed (unit-tested).
+3. **Proactive suggestion + progress dashboard** — new `GET /api/curriculum` and `GET /api/dashboard` (per-topic progress bars: attempts, correctness %, avg box) and an enriched `GET /api/suggest`. Frontend (`frontend/app/page.tsx`): drill-type toggle, a "Suggested next" prompt with a Practise-this action, and a per-topic mastery dashboard.
+
+Correctness rule upheld: all answers (note names + durations) are computed in `src/music/`; the LLM is used only for teaching text (one call per drill set).
+
+### Phase 3 — Chords, Progressions & Studio (planned)
+
+> Wires the remaining labelled stubs: chord/harmony drills, chord-progression / sight-reading, multi-student studio, PDF export, and animated full-piece playback. *Not built in this handoff.*

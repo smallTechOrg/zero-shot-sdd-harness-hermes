@@ -7,6 +7,7 @@ involvement. Usable in the browser UI directly (returns an <svg> string).
 
 from __future__ import annotations
 
+from .rhythm import DURATIONS
 from .theory import (
     CLEF_BOTTOM_LINE_MIDI,
     staff_step,
@@ -115,6 +116,95 @@ def render_staff(midi: int, clef: str) -> str:
         f'<ellipse cx="{NOTE_X:.1f}" cy="{y:.1f}" rx="9" ry="6.6" '
         f'fill="#111827"/></g>'
     )
+
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
+# ---- Rhythm / duration rendering -------------------------------------------------
+# A rhythm symbol (note or rest) is drawn on a single staff line centred on the
+# staff so the student focuses on the *shape* (open vs filled head, flags), not
+# the pitch. Duration correctness is computed in src.music.rhythm — never LLM.
+
+RHYTHM_LINE_Y = (BOTTOM_LINE_Y + TOP_MARGIN) / 2.0 + 10.0
+
+
+def _rest_glyph(label: str) -> str:
+    """A simple, legible rest glyph (text) for the given duration label.
+
+    Uses a label with a small shape cue rather than a true Bravura glyph so it
+    renders in any font; the *name* is still computed in rhythm.py.
+    """
+    cue = {
+        "whole": "▬ (whole rest)",
+        "half": "𝄻 (half rest)",
+        "quarter": "𝄼 (quarter rest)",
+        "eighth": "𝄽 (eighth rest)",
+        "sixteenth": "𝄾 (sixteenth rest)",
+    }
+    return cue.get(label, label)
+
+
+def render_rhythm(label: str, is_rest: bool = False) -> str:
+    """Return an SVG string rendering a rhythm symbol (note head + stem + flags
+    or a rest glyph) for the given duration label. Computed, never LLM."""
+    if label not in DURATIONS:
+        raise ValueError(f"unknown duration label: {label!r}")
+    info = DURATIONS[label]
+    y = RHYTHM_LINE_Y
+
+    parts: list[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {WIDTH} '
+        f'{int(BOTTOM_LINE_Y + TOP_MARGIN):d}" width="100%" '
+        f'preserveAspectRatio="xMidYMid meet" role="img" '
+        f'aria-label="{"rest" if is_rest else "note"}: {label}">',
+    ]
+
+    # one reference staff line through the centre
+    parts.append(
+        f'<line x1="{LEFT:.1f}" y1="{y:.1f}" x2="{LEFT + STAFF_WIDTH:.1f}" '
+        f'y2="{y:.1f}" stroke="#1f2937" stroke-width="1.4"/>'
+    )
+
+    if is_rest:
+        parts.append(
+            f'<text x="{NOTE_X - 30:.1f}" y="{y + 8:.1f}" '
+            f'font-size="34" font-family="serif" fill="#111827">'
+            f'{_rest_glyph(label)}</text>'
+        )
+    else:
+        # filled vs open note head
+        fill = "#111827" if info["filled"] else "none"
+        stroke = "#111827"
+        parts.append(
+            f'<g transform="rotate(-18 {NOTE_X:.1f} {y:.1f})">'
+            f'<ellipse cx="{NOTE_X:.1f}" cy="{y:.1f}" rx="9" ry="6.6" '
+            f'fill="{fill}" stroke="{stroke}" stroke-width="1.6"/></g>'
+        )
+        # stem (whole notes have none; half/quarter/eighth/sixteenth do)
+        if label != "whole":
+            stem_up = True  # always up for clarity in the rhythm drill
+            dirn = -1 if stem_up else 1
+            parts.append(
+                f'<line x1="{NOTE_X + 9:.1f}" y1="{y:.1f}" '
+                f'x2="{NOTE_X + 9:.1f}" y2="{y + 34 * dirn:.1f}" '
+                f'stroke="#111827" stroke-width="1.6"/>'
+            )
+            # flags for eighth / sixteenth
+            if info["flags"] >= 1:
+                fy = y + 34 * dirn
+                parts.append(
+                    f'<path d="M {NOTE_X + 9:.1f} {fy:.1f} '
+                    f'q 14 6 10 22" fill="none" stroke="#111827" '
+                    f'stroke-width="2.2"/>'
+                )
+            if info["flags"] >= 2:
+                fy = y + 34 * dirn + 14
+                parts.append(
+                    f'<path d="M {NOTE_X + 9:.1f} {fy:.1f} '
+                    f'q 14 6 10 22" fill="none" stroke="#111827" '
+                    f'stroke-width="2.2"/>'
+                )
 
     parts.append("</svg>")
     return "\n".join(parts)
