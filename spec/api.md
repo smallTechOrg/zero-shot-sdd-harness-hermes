@@ -1,41 +1,38 @@
-# API
+# API — Data Analyst Agent
 
-> Fill in this section — see comments below.
+Base: `http://localhost:8001`
 
----
-
-## API Style
-
-<!-- FILL IN: REST / GraphQL / CLI / webhook / none -->
-
-## Endpoints / Commands
-
-<!-- FILL IN: One section per endpoint or command. -->
-
-### `<!-- METHOD /path or command name -->`
-
-**Purpose:** <!-- what this endpoint does -->
-
-**Request:**
+## POST /api/query
+Body: `{ "question": "..." }`
+Returns:
 ```json
 {
-  "<!-- field -->": "<!-- type and description -->"
+  "runId": "guid",
+  "plan": "short analysis plan",
+  "chartType": "bar|line|pie",
+  "sql": "SELECT TOP 1000 ...",
+  "reasoningSteps": ["...", "..."],
+  "clarification": null,
+  "data": { "labels": [...], "datasets": [{ "label": "...", "data": [...] }] },
+  "auditSaved": true
 }
 ```
+If clarification needed: `clarification` is a string, `data` is null, no SQL runs.
 
-**Response:**
-```json
-{
-  "<!-- field -->": "<!-- type and description -->"
-}
-```
+## POST /api/query/stream  (SSE)
+Body: `{ "question": "..." }`
+Streams `text/event-stream` events: `plan`, `sql`, `step` (each reasoning step
+with "Step N of M"), `data`, `done`. Terminal `done` carries the runId.
 
-**Error cases:**
-| Status | Condition |
-|--------|-----------|
-| 400 | <!-- bad input --> |
-| 500 | <!-- internal error --> |
+## GET /api/schema
+Returns cached warehouse schema + aggregate profiles JSON.
 
-## Authentication
+## GET /api/audit?date=YYYY-MM-DD
+Returns `{ date, runs: [...], totalTokens }` for the running daily token total.
 
-<!-- FILL IN: How are API callers authenticated? -->
+## GET /api/health
+Returns `{ "status": "ok" }`.
+
+## Error contract
+Deny-list violation → 400 `{ error: "SQL rejected: contains <TOKEN>" }`.
+Missing OpenRouter key → 503 `{ error: "LLM not configured" }` (build/test unaffected).

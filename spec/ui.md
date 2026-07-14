@@ -1,32 +1,23 @@
-# UI
+# UI — Data Analyst Agent
 
-> **Boilerplate status:** Delete this file if the agent has no UI. Otherwise, filled in by the spec-writer sub-agent.
+Single page (React + Vite).
 
----
+## Layout
+- **Header:** title + running daily token total (polls `/api/audit?date=today`).
+- **Question box:** text input + "Ask" button. One question at a time (disabled
+  while streaming).
+- **Reasoning panel (collapsible):** shows the full reasoning chain as it streams
+  via SSE, with a "Step N of M" counter. Collapsed by default after completion.
+- **Plan + SQL:** the plan text and generated SQL shown (SQL read-only, mono).
+- **Clarification prompt:** if the API returns a clarification, render it as a
+  prompt asking the user to refine; no chart is drawn.
+- **Chart canvas:** Chart.js (react-chartjs-2) renders bar/line/pie per
+  `chartType`.
 
-## UI Type
+## Behaviour
+- On Ask → open SSE to `/api/query/stream`, append steps live, then draw chart.
+- Errors (deny-list / LLM not configured) render inline, non-fatal.
 
-<!-- FILL IN: Web dashboard / CLI / chat interface / none -->
-
-## Views / Screens
-
-<!-- FILL IN: One section per major view. -->
-
-### Screen: <!-- Name -->
-
-**Purpose:** <!-- what the user does here -->
-
-**Key elements:**
-- <!-- element 1 -->
-- <!-- element 2 -->
-
-**Actions available:**
-- <!-- action 1 -->
-
-## Error States
-
-<!-- FILL IN: How does the UI surface errors and loading states to the user? -->
-
-## Tech Stack
-
-<!-- FILL IN: Filled in by spec-writer. E.g., Next.js 15 + React 19 + Tailwind -->
+## Stubs (labelled NON-FUNCTIONAL for later phases)
+- "History" tab — disabled, tooltip "Coming in Phase 2".
+- "Export CSV" button — disabled, tooltip "Coming in Phase 3".

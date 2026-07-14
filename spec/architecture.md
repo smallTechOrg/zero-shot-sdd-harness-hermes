@@ -1,68 +1,43 @@
-# Architecture
-
-> Fill in this section — see comments below.
-
----
-
-## System Overview
-
-<!-- FILL IN: One paragraph describing the system at a high level. Who/what interacts with it? -->
-
-## Component Map
-
-<!-- FILL IN: List the major components and what each does. -->
-
-```
-[Component A]
-    ↓
-[Component B]   ←→   [External Service]
-    ↓
-[Component C]
-```
-
-## Layers
-
-<!-- FILL IN: Describe the layers of the system (e.g., API → Agent Loop → Tools → Storage). -->
-
-| Layer | Responsibility |
-|-------|----------------|
-| <!-- layer --> | <!-- responsibility --> |
-
-## Data Flow
-
-<!-- FILL IN: Walk through the main data flow from trigger to output. -->
-
-1. Trigger: <!-- how does the agent start? (cron, webhook, user input, etc.) -->
-2. <!-- step 2 -->
-3. <!-- step 3 -->
-4. Output: <!-- what does the agent produce? -->
-
-## External Dependencies
-
-<!-- FILL IN: APIs, services, databases the agent depends on. -->
-
-| Dependency | Purpose | Failure Mode |
-|------------|---------|--------------|
-| <!-- name --> | <!-- what it does --> | <!-- what happens if it's down --> |
+# Architecture — Data Analyst Agent
 
 ## Stack
 
-> This project's concrete technology choices (captured at intake, filled by the spec-writer). The generic, every-project rules — model-naming, DB driver, dev port, test environment — live in `harness/patterns/tech-stack.md`; this section is only what **this** project picked.
+- **Backend:** ASP.NET Core 8 Web API (Minimal API), C# / .NET 8 SDK.
+- **DB driver:** Microsoft.Data.SqlClient 5.2.2 (native arm64 macOS verified).
+- **Warehouse:** Microsoft SQL Server — Azure SQL Edge in Docker (Phase 1).
+- **Audit store:** SQLite via Microsoft.Data.Sqlite.
+- **LLM:** OpenRouter chat completions (`AGENT_LLM_MODEL`, default
+  google/gemini-flash-1.5). Streaming SSE.
+- **Env loading:** DotNetEnv reads repo-root `.env` at app startup.
+- **Frontend:** React 18 + Vite + Chart.js via react-chartjs-2.
+- **Tests:** xUnit.
 
-- **Language:** <!-- FILL IN: e.g., Python 3.12 -->
-- **Agent framework:** <!-- FILL IN: e.g., LangGraph / custom / none -->
-- **LLM provider + model:** <!-- FILL IN: e.g., Anthropic / claude-sonnet-4-6 -->
-- **Backend:** <!-- FILL IN: e.g., FastAPI / none -->
-- **Database + ORM:** <!-- FILL IN: e.g., PostgreSQL + SQLAlchemy 2.0 / none -->
-- **Frontend:** <!-- FILL IN: e.g., Next.js / none -->
-- **Dependency management:** <!-- FILL IN: e.g., uv + pyproject.toml -->
+## Component Layout
 
-| Key library | Version | Purpose |
-|-------------|---------|---------|
-| <!-- name --> | <!-- ver --> | <!-- purpose --> |
+```
+data-analyst/
+  backend/    ASP.NET Core 8 Minimal API + Services
+  seed/       .NET console warehouse seeder
+  frontend/   React + Vite + Chart.js SPA
+  tests/      xUnit unit tests
+```
 
-**Avoid:** <!-- FILL IN: libraries/patterns explicitly off-limits, and why -->
+## Data Flow (core path)
 
-## Deployment Model
+1. UI POSTs `{question}` to `/api/query`.
+2. SchemaService returns cached warehouse schema + aggregate profiles.
+3. SqlGenerationService builds a system prompt (schema + profiles ONLY, no rows)
+   and calls OpenRouter, receiving strict JSON `{plan, chartType, sql, reasoning,
+   clarification}`.
+4. If `clarification` present → return it; UI asks the user. No SQL runs.
+5. SqlExecutionService validates SQL (deny-list + enforced TOP, no SELECT *),
+   executes read-only, returns rows to ChartService only (never the LLM).
+6. ChartService shapes rows into Chart.js `{labels, datasets}`.
+7. AuditService records the run to SQLite.
+8. `/api/query/stream` (SSE) streams plan → sql → reasoning steps.
 
-<!-- FILL IN: How does this run? (local script, cloud function, long-running service, etc.) -->
+## Privacy & Safety Boundaries
+
+- LLM payload = schema + profile stats. Enforced by construction: query results
+  are never passed to any LLM call.
+- Deny-list + TOP enforcement run server-side before execution.

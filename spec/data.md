@@ -1,34 +1,39 @@
-# Data Model
+# Data — Warehouse Schema & Seed
 
-> Fill in this section — see comments below.
+## Star Schema (WarehouseDemo)
 
----
+### FactSales
+| Column      | Type          | Notes                       |
+|-------------|---------------|-----------------------------|
+| SalesKey    | BIGINT IDENTITY PK |                        |
+| DateKey     | INT FK → DimDate.DateKey |               |
+| StoreKey    | INT FK → DimStore.StoreKey |             |
+| ProductKey  | INT FK → DimProduct.ProductKey |         |
+| ChannelKey  | INT FK → DimChannel.ChannelKey |         |
+| Quantity    | INT           |                             |
+| Amount      | DECIMAL(12,2) |                             |
 
-## Storage Technology
+### DimDate
+DateKey (INT PK, yyyymmdd), Date (DATE), Year, Month, MonthName, Quarter, DayOfWeek.
 
-<!-- FILL IN: What database/storage does this project use and why? -->
+### DimStore
+StoreKey (INT PK), StoreName, Region, City.
 
-## Entities
+### DimProduct
+ProductKey (INT PK), ProductName, Category, Brand.
 
-<!-- FILL IN: One section per major entity. -->
+### DimChannel
+ChannelKey (INT PK), ChannelName (Online, Retail, Wholesale, Partner).
 
-### Entity: <!-- Name -->
+## Seed Plan
 
-<!-- FILL IN: What does this entity represent? -->
+- ~730 days of DimDate (2 years), 20 stores, 200 products, 4 channels.
+- ~100,000 FactSales rows generated with plausible random distributions.
+- Bulk-inserted in batches for speed.
+- Idempotent: drops & recreates WarehouseDemo tables on run.
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| id | <!-- type --> | yes | Primary key |
-| <!-- field --> | <!-- type --> | <!-- yes/no --> | <!-- description --> |
+## Aggregate Profiles (sent to LLM)
 
-### Relationships
-
-<!-- FILL IN: How do entities relate to each other? -->
-
-## Data Lifecycle
-
-<!-- FILL IN: When is data created, updated, and deleted? Is anything time-boxed or archived? -->
-
-## Sensitive Data
-
-<!-- FILL IN: What fields contain PII or secrets? How are they protected? -->
+For each table: row count. For each column: distinct count, null%, and for
+numeric columns min/max/avg. Computed via sampled aggregate queries and cached
+in memory. RAW ROWS ARE NEVER PROFILED OUT TO THE LLM.

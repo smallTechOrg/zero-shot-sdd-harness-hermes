@@ -1,0 +1,21 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: #f5f6f8; color: #1c1e21; }
+.app { max-width: 900px; margin: 0 auto; padding: 24px; }
+header { display: flex; justify-content: space-between; align-items: center; }
+h1 { font-size: 22px; }
+.badge { font-size: 12px; background: #4e79a7; color: #fff; padding: 2px 8px; border-radius: 10px; vertical-align: middle; }
+.tokens { font-size: 14px; color: #555; }
+.ask-row { display: flex; gap: 8px; margin: 16px 0 8px; }
+.ask-row input { flex: 1; padding: 10px 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 15px; }
+.ask-row button { padding: 10px 20px; border: none; border-radius: 8px; background: #4e79a7; color: #fff; font-size: 15px; cursor: pointer; }
+.ask-row button:disabled { background: #9db6cf; cursor: default; }
+.stubs { display: flex; gap: 8px; margin-bottom: 16px; }
+.stubs button { padding: 4px 12px; border: 1px dashed #bbb; background: #eee; color: #999; border-radius: 6px; font-size: 12px; cursor: not-allowed; }
+.error { background: #ffe3e3; color: #b00020; padding: 10px 12px; border-radius: 8px; margin: 8px 0; }
+.clarify { background: #fff6d6; padding: 12px; border-radius: 8px; margin: 8px 0; }
+.reasoning { background: #fff; border: 1px solid #e3e5e8; border-radius: 10px; margin: 12px 0; }
+.reasoning-head { display: flex; justify-content: space-between; padding: 12px 16px; cursor: pointer; user-select: none; }
+.reasoning-body { padding: 0 16px 12px; }
+.step { color: #444; font-size: 14px; margin: 4px 0; }
+.sql { background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+.chart { background: #fff; border: 1px solid #e3e5e8; border-radius: 10px; padding: 20px; margin-top: 12px; }

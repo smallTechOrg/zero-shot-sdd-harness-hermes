@@ -1,0 +1,5 @@
+bin/
+obj/
+audit.db
+audit.db-shm
+audit.db-wal
