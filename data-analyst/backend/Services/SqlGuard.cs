@@ -65,8 +65,10 @@ public static class SqlGuard
         if (Regex.IsMatch(trimmed, @"SELECT\s+\*", RegexOptions.IgnoreCase))
             return new ValidationResult(false, "SQL rejected: SELECT * is not allowed", trimmed);
 
-        // Enforce TOP on the leading SELECT if missing.
-        var hasTop = Regex.IsMatch(trimmed, @"SELECT\s+TOP\s*\(?\s*\d+", RegexOptions.IgnoreCase);
+        // Enforce TOP on the leading SELECT if missing. Detect TOP with or
+        // without parentheses so we never inject a second TOP (double-TOP is
+        // a syntax error).
+        var hasTop = Regex.IsMatch(trimmed, @"SELECT\s+TOP\s*\d", RegexOptions.IgnoreCase);
         var final = trimmed;
         if (!hasTop)
         {
@@ -75,6 +77,15 @@ public static class SqlGuard
                 @"SELECT\s+",
                 $"SELECT TOP {maxRows} ",
                 RegexOptions.IgnoreCase);
+        }
+
+        // Reject functions that don't exist in T-SQL (common LLM mistakes).
+        var nonTsql = new[] { "LPAD", "RPAD", "DATE_FORMAT", "STR_TO_DATE", "IFNULL", "NVL", "REGEXP" };
+        foreach (var fn in nonTsql)
+        {
+            if (Regex.IsMatch(final, $@"\b{fn}\s*\(", RegexOptions.IgnoreCase))
+                return new ValidationResult(false,
+                    $"SQL rejected: '{fn}' is not a T-SQL function (use T-SQL equivalents, e.g. RIGHT('0'+CAST(x AS VARCHAR),2))", final);
         }
 
         return new ValidationResult(true, null, final);

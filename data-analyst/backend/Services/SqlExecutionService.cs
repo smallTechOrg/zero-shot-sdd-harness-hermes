@@ -32,20 +32,31 @@ public class SqlExecutionService
         var columns = new List<string>();
         var rows = new List<object?[]>();
 
-        await using var conn = new SqlConnection(_connString);
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(v.Sql, conn) { CommandTimeout = 60 };
-        await using var r = await cmd.ExecuteReaderAsync(ct);
-
-        for (int i = 0; i < r.FieldCount; i++)
-            columns.Add(r.GetName(i));
-
-        while (await r.ReadAsync(ct))
+        try
         {
-            var row = new object?[r.FieldCount];
+            await using var conn = new SqlConnection(_connString);
+            await conn.OpenAsync(ct);
+            await using var cmd = new SqlCommand(v.Sql, conn) { CommandTimeout = 60 };
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+
             for (int i = 0; i < r.FieldCount; i++)
-                row[i] = r.IsDBNull(i) ? null : r.GetValue(i);
-            rows.Add(row);
+                columns.Add(r.GetName(i));
+
+            while (await r.ReadAsync(ct))
+            {
+                var row = new object?[r.FieldCount];
+                for (int i = 0; i < r.FieldCount; i++)
+                    row[i] = r.IsDBNull(i) ? null : r.GetValue(i);
+                rows.Add(row);
+            }
+        }
+        catch (SqlException ex)
+        {
+            // The generated SQL failed on the engine (e.g. a non-T-SQL function
+            // like LPAD). Return a structured rejection so the API answers 400
+            // with the reason instead of crashing with a 500.
+            return new ExecResult(false,
+                $"SQL failed ({ex.Number}): {ex.Message}", v.Sql, new(), new());
         }
 
         return new ExecResult(true, null, v.Sql, columns, rows);

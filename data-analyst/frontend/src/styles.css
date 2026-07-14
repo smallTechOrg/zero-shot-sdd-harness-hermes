@@ -9,6 +9,11 @@ h1 { font-size: 22px; }
 .ask-row input { flex: 1; padding: 10px 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 15px; }
 .ask-row button { padding: 10px 20px; border: none; border-radius: 8px; background: #4e79a7; color: #fff; font-size: 15px; cursor: pointer; }
 .ask-row button:disabled { background: #9db6cf; cursor: default; }
+.suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; align-items: center; }
+.sug-label { font-size: 13px; color: #777; margin-right: 4px; }
+.chip { padding: 5px 10px; border: 1px solid #cdd6e0; background: #eef3f8; color: #2b4a6b; border-radius: 14px; font-size: 12.5px; cursor: pointer; }
+.chip:hover:not(:disabled) { background: #dde8f2; }
+.chip:disabled { opacity: .6; cursor: default; }
 .stubs { display: flex; gap: 8px; margin-bottom: 16px; }
 .stubs button { padding: 4px 12px; border: 1px dashed #bbb; background: #eee; color: #999; border-radius: 6px; font-size: 12px; cursor: not-allowed; }
 .error { background: #ffe3e3; color: #b00020; padding: 10px 12px; border-radius: 8px; margin: 8px 0; }
@@ -19,3 +24,15 @@ h1 { font-size: 22px; }
 .step { color: #444; font-size: 14px; margin: 4px 0; }
 .sql { background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
 .chart { background: #fff; border: 1px solid #e3e5e8; border-radius: 10px; padding: 20px; margin-top: 12px; }
+.catalog { background: #fff; border: 1px solid #e3e5e8; border-radius: 10px; padding: 16px 20px; margin-top: 20px; }
+.catalog h2 { font-size: 17px; margin: 0 0 4px; }
+.catalog-note { font-size: 12.5px; color: #888; margin: 0 0 12px; }
+.tables { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.table-card { border: 1px solid #eef0f3; border-radius: 8px; overflow: hidden; }
+.table-head { display: flex; justify-content: space-between; padding: 8px 10px; background: #f0f4f8; font-size: 14px; }
+.rowcount { font-size: 12px; color: #777; }
+.table-card table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.table-card th, .table-card td { text-align: left; padding: 4px 8px; border-top: 1px solid #f0f0f2; }
+.table-card th { color: #888; font-weight: 600; }
+.table-card td:nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .tables { grid-template-columns: 1fr; } }

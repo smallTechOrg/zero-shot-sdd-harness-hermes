@@ -23,8 +23,19 @@ function toChartJs(chartType, data) {
   return { labels: data.labels, datasets }
 }
 
+// Suggested questions derived from the warehouse shape — helps the user know
+// what is answerable without first reading the schema.
+const SUGGESTIONS = [
+  'Show me monthly sales amount by channel as a line chart',
+  'Total sales amount by store as a bar chart',
+  'Top 10 products by quantity sold as a bar chart',
+  'Monthly sales trend as a line chart',
+  'Sales amount by channel as a pie chart',
+  'Average order amount by month as a line chart',
+]
+
 export default function App() {
-  const [question, setQuestion] = useState('Show me monthly sales amount by channel as a line chart')
+  const [question, setQuestion] = useState('')
   const [busy, setBusy] = useState(false)
   const [plan, setPlan] = useState('')
   const [sql, setSql] = useState('')
@@ -35,6 +46,7 @@ export default function App() {
   const [error, setError] = useState(null)
   const [collapsed, setCollapsed] = useState(false)
   const [dailyTokens, setDailyTokens] = useState(0)
+  const [catalog, setCatalog] = useState(null)
   const stepIndex = useRef(0)
 
   const today = new Date().toISOString().slice(0, 10)
@@ -46,56 +58,47 @@ export default function App() {
       setDailyTokens(j.totalTokens ?? 0)
     } catch { /* ignore */ }
   }
-  useEffect(() => { refreshTokens() }, [])
 
-  async function ask() {
+  async function loadCatalog() {
+    try {
+      const r = await fetch('/api/schema')
+      const j = await r.json()
+      setCatalog(j)
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => { refreshTokens(); loadCatalog() }, [])
+
+  async function ask(q) {
+    const query = (q ?? question).trim()
+    if (!query || busy) return
+    setQuestion(query)
     setBusy(true); setError(null); setPlan(''); setSql(''); setSteps([])
     setChartData(null); setClarification(null); setCollapsed(false)
     stepIndex.current = 0
 
     try {
-      const resp = await fetch('/api/query/stream', {
+      // Non-streaming call: reliable through the dev proxy (SSE is truncated by
+      // http-proxy buffering). The response still carries the full reasoning
+      // chain (plan, steps, sql) so the panel renders identically.
+      const resp = await fetch('/api/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question: query }),
       })
-      if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`)
-
-      const reader = resp.body.getReader()
-      const decoder = new TextDecoder()
-      let buf = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        const events = buf.split('\n\n')
-        buf = events.pop() ?? ''
-        for (const block of events) handleEvent(block)
-      }
+      const j = await resp.json()
+      if (!resp.ok) throw new Error(j.error || `HTTP ${resp.status}`)
+      setChartType(j.chartType)
+      setPlan(j.plan ?? '')
+      setSteps(j.reasoningSteps ?? [])
+      setSql(j.sql ?? '')
+      if (j.clarification) setClarification(j.clarification)
+      if (j.data) setChartData(j.data)
     } catch (e) {
       setError(e.message)
     } finally {
       setBusy(false); setCollapsed(true); refreshTokens()
     }
-  }
-
-  function handleEvent(block) {
-    const evLine = block.split('\n').find(l => l.startsWith('event:'))
-    const dataLine = block.split('\n').find(l => l.startsWith('data:'))
-    if (!evLine || !dataLine) return
-    const ev = evLine.slice(6).trim()
-    let payload
-    try { payload = JSON.parse(dataLine.slice(5).trim()) } catch { return }
-
-    if (ev === 'plan') setPlan(payload.text)
-    else if (ev === 'sql') setSql(payload.text)
-    else if (ev === 'step') setSteps(s => [...s, payload.text])
-    else if (ev === 'data') {
-      setChartType(payload.chartType)
-      if (payload.clarification) setClarification(payload.clarification)
-      if (payload.data) setChartData(payload.data)
-    }
-    else if (ev === 'error') setError(payload.error)
   }
 
   const ChartComp = chartType === 'line' ? Line : chartType === 'pie' ? Pie : Bar
@@ -110,11 +113,18 @@ export default function App() {
       <div className="ask-row">
         <input value={question} disabled={busy}
           onChange={e => setQuestion(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !busy && ask()}
+          onKeyDown={e => e.key === 'Enter' && ask()}
           placeholder="Ask about the warehouse..." />
-        <button onClick={ask} disabled={busy || !question.trim()}>
+        <button onClick={() => ask()} disabled={busy || !question.trim()}>
           {busy ? 'Thinking…' : 'Ask'}
         </button>
+      </div>
+
+      <div className="suggestions">
+        <span className="sug-label">Try:</span>
+        {SUGGESTIONS.map((s, i) => (
+          <button key={i} className="chip" disabled={busy} onClick={() => ask(s)}>{s}</button>
+        ))}
       </div>
 
       <nav className="stubs">
@@ -148,6 +158,40 @@ export default function App() {
         <section className="chart">
           <ChartComp data={toChartJs(chartType, chartData)}
             options={{ responsive: true, plugins: { legend: { position: 'top' } } }} />
+        </section>
+      )}
+
+      {catalog && (
+        <section className="catalog">
+          <h2>📚 Warehouse catalog</h2>
+          <p className="catalog-note">Schema + aggregate profiles only — raw rows never leave the database.</p>
+          <div className="tables">
+            {catalog.tables.map(t => (
+              <div key={t.table} className="table-card">
+                <div className="table-head">
+                  <b>{t.table}</b>
+                  <span className="rowcount">{t.rowCount?.toLocaleString()} rows</span>
+                </div>
+                <table>
+                  <thead>
+                    <tr><th>Column</th><th>Type</th><th>Distinct</th><th>Nulls</th><th>Min</th><th>Max</th></tr>
+                  </thead>
+                  <tbody>
+                    {t.columns.map(c => (
+                      <tr key={c.column}>
+                        <td>{c.column}</td>
+                        <td>{c.dataType}</td>
+                        <td>{c.distinctCount}</td>
+                        <td>{c.nullPercent}%</td>
+                        <td>{c.min ?? '—'}</td>
+                        <td>{c.max ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
         </section>
       )}
     </div>

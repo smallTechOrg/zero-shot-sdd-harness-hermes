@@ -28,10 +28,15 @@ public class SqlGenerationService
 
     private const string ContractInstructions = @"You are a careful data analyst. Given a warehouse schema with aggregate
 profile stats (NOT raw data), plan the analysis, choose a chart type, and write ONE read-only
-Microsoft SQL Server SELECT query. Rules:
+Microsoft SQL Server (T-SQL) SELECT query. Rules:
+- The engine is Microsoft SQL Server / Azure SQL Edge. Use only T-SQL.
 - Output STRICT JSON only: {""plan"":string, ""chartType"":""bar""|""line""|""pie"", ""sql"":string, ""reasoning"":[string], ""clarification"":string|null}
-- SQL MUST be a single SELECT with an explicit TOP N (N<=1000). Never SELECT *. Never mutate data.
-- The first selected column is the category/label; remaining numeric columns are chart series.
+- SQL MUST be a single SELECT with an explicit TOP clause written exactly as 'TOP 1000 '
+  (the word TOP, a space, the integer, a space) — never 'TOP(1000)' or 'TOP1000'.
+- Never SELECT *. Never mutate data. The first selected column is the category/label;
+  remaining numeric columns are chart series.
+- For zero-padded month formatting use T-SQL: RIGHT('0' + CAST(d.Month AS VARCHAR(2)), 2).
+  NEVER use LPAD, RPAD, DATE_FORMAT, STR_TO_DATE, IFNULL, NVL, or REGEXP — those are not T-SQL.
 - If the question is ambiguous, set ""clarification"" to a question and leave sql empty.
 - Flag any obvious data-quality issues (nulls/outliers) you notice in the reasoning.";
 
@@ -59,6 +64,7 @@ Microsoft SQL Server SELECT query. Rules:
                 new { role = "user", content = question }
             },
             temperature = 0.1,
+            max_tokens = 800,
             response_format = new { type = "json_object" }
         };
 
@@ -69,7 +75,20 @@ Microsoft SQL Server SELECT query. Rules:
 
         using var resp = await _http.SendAsync(req, ct);
         var body = await resp.Content.ReadAsStringAsync(ct);
-        resp.EnsureSuccessStatusCode();
+        if (!resp.IsSuccessStatusCode)
+        {
+            // Surface OpenRouter's own error (e.g. 402 credits, 401 auth) instead of a bare 500.
+            string detail = body;
+            try
+            {
+                using var err = JsonDocument.Parse(body);
+                if (err.RootElement.TryGetProperty("error", out var e) &&
+                    e.TryGetProperty("message", out var m))
+                    detail = m.GetString() ?? body;
+            }
+            catch { /* keep raw body */ }
+            throw new InvalidOperationException($"OpenRouter {resp.StatusCode}: {detail}");
+        }
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
