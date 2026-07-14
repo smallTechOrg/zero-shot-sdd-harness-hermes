@@ -26,12 +26,12 @@ function toChartJs(chartType, data) {
 // Suggested questions derived from the warehouse shape — helps the user know
 // what is answerable without first reading the schema.
 const SUGGESTIONS = [
-  'Show me monthly sales amount by channel as a line chart',
-  'Total sales amount by store as a bar chart',
-  'Top 10 products by quantity sold as a bar chart',
-  'Monthly sales trend as a line chart',
-  'Sales amount by channel as a pie chart',
-  'Average order amount by month as a line chart',
+  'जिलेवार FIR पंजीकरण की मासिक प्रवृत्ति (Monthly FIR registration trend by district)',
+  'अपराध के प्रकार के अनुसार कुल FIR (Total FIRs by crime head/category)',
+  'बरामदगी दर (Detection rate) — अपराध जिनमें चार्जशीट हुई (crimes detected vs undetected)',
+  'लंबित मामलों की स्थिति (Case disposal / pendency status)',
+  'शीर्ष 10 थाने (police stations) अधिकतम FIR के साथ (Top 10 PS by FIR count)',
+  'वर्ष 2024 में सबसे अधिक अपराध वाले जिले (Districts with most crimes in 2024)',
 ]
 
 export default function App() {
@@ -106,30 +106,30 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <h1>📊 Data Analyst Agent <span className="badge">v0.1</span></h1>
-        <div className="tokens">Daily tokens: <b>{dailyTokens}</b></div>
+        <h1>📊 पुलिस अपराध विश्लेषक (Police Crime Analyst) <span className="badge">UP Police · v0.1</span></h1>
+        <div className="tokens">आज के टोकन (Daily tokens): <b>{dailyTokens}</b></div>
       </header>
 
       <div className="ask-row">
         <input value={question} disabled={busy}
           onChange={e => setQuestion(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && ask()}
-          placeholder="Ask about the warehouse..." />
+          placeholder="अपराध डेटा के बारे में पूछें... (Ask about crime data — e.g. FIR trend by district)" />
         <button onClick={() => ask()} disabled={busy || !question.trim()}>
-          {busy ? 'Thinking…' : 'Ask'}
+          {busy ? 'विचार कर रहा... (Thinking)' : 'पूछें (Ask)'}
         </button>
       </div>
 
       <div className="suggestions">
-        <span className="sug-label">Try:</span>
+        <span className="sug-label">आज़माएँ (Try):</span>
         {SUGGESTIONS.map((s, i) => (
           <button key={i} className="chip" disabled={busy} onClick={() => ask(s)}>{s}</button>
         ))}
       </div>
 
       <nav className="stubs">
-        <button disabled title="Coming in Phase 2">History</button>
-        <button disabled title="Coming in Phase 3">Export CSV</button>
+        <button disabled title="Phase 2 में (Coming in Phase 2)">इतिहास (History)</button>
+        <button disabled title="Phase 3 में (Coming in Phase 3)">CSV निर्यात (Export CSV)</button>
       </nav>
 
       {error && <div className="error">⚠️ {error}</div>}
@@ -163,8 +163,8 @@ export default function App() {
 
       {catalog && (
         <section className="catalog">
-          <h2>📚 Warehouse catalog</h2>
-          <p className="catalog-note">Schema + aggregate profiles only — raw rows never leave the database.</p>
+          <h2>📚 डेटाबेस कैटलॉग (Database catalog — CCTNS 1.0)</h2>
+          <p className="catalog-note">केवल स्कीमा और सारांश (Schema + aggregate profiles only) — कच्ची पंक्तियाँ (raw rows) डेटाबेस से बाहर नहीं जातीं।</p>
           <div className="tables">
             {catalog.tables.map(t => (
               <div key={t.table} className="table-card">

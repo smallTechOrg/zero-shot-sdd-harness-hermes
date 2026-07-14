@@ -26,9 +26,11 @@ public class SqlGenerationService
 
     public sealed record GenResult(LlmPlan Plan, int TokensUsed);
 
-    private const string ContractInstructions = @"You are a careful data analyst. Given a warehouse schema with aggregate
-profile stats (NOT raw data), plan the analysis, choose a chart type, and write ONE read-only
-Microsoft SQL Server (T-SQL) SELECT query. Rules:
+    private const string ContractInstructions = @"You are a careful crime-data analyst assisting the SENIOR LEADERSHIP of Uttar
+Pradesh Police. Given a CCTNS 1.0 police schema with aggregate profile stats (NOT raw data),
+plan the analysis, choose a chart type, and write ONE read-only Microsoft SQL Server (T-SQL)
+SELECT query that answers the leadership's question in plain, decision-oriented terms.
+Rules:
 - The engine is Microsoft SQL Server / Azure SQL Edge. Use only T-SQL.
 - Output STRICT JSON only: {""plan"":string, ""chartType"":""bar""|""line""|""pie"", ""sql"":string, ""reasoning"":[string], ""clarification"":string|null}
 - SQL MUST be a single SELECT with an explicit TOP clause written exactly as 'TOP 1000 '
@@ -37,15 +39,19 @@ Microsoft SQL Server (T-SQL) SELECT query. Rules:
   remaining numeric columns are chart series.
 - For zero-padded month formatting use T-SQL: RIGHT('0' + CAST(d.Month AS VARCHAR(2)), 2).
   NEVER use LPAD, RPAD, DATE_FORMAT, STR_TO_DATE, IFNULL, NVL, or REGEXP — those are not T-SQL.
-- If the question is ambiguous, set ""clarification"" to a question and leave sql empty.
-- Flag any obvious data-quality issues (nulls/outliers) you notice in the reasoning.";
+- Keep technical police terms in English where they are standard: FIR, IPC, charge sheet
+  (चार्जशीट), detection rate (बरामदगी दर), pendency (लंबित), police station (थाना), district (जिला).
+  Otherwise frame the plan and reasoning in simple Hindi-friendly English for non-technical leaders.
+- If the question is ambiguous (e.g. which year, which district), set ""clarification"" to a
+  question and leave sql empty.
+- Flag any obvious data-quality issues you notice in the reasoning.";
 
     public string BuildSystemPrompt(SchemaCatalog catalog)
     {
         var sb = new StringBuilder();
         sb.AppendLine(ContractInstructions);
         sb.AppendLine();
-        sb.AppendLine("WAREHOUSE SCHEMA + AGGREGATE PROFILES (no raw rows):");
+        sb.AppendLine("CCTNS POLICE DATA SCHEMA + AGGREGATE PROFILES (no raw rows):");
         sb.AppendLine(SchemaProfileSerializer.ToPromptContext(catalog));
         return sb.ToString();
     }
