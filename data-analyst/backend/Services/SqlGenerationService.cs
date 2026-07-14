@@ -70,18 +70,33 @@ Rules:
                 new { role = "user", content = question }
             },
             temperature = 0.1,
-            max_tokens = 800,
+            max_tokens = 600,
             response_format = new { type = "json_object" }
         };
 
-        using var req = new HttpRequestMessage(HttpMethod.Post,
-            "https://openrouter.ai/api/v1/chat/completions");
-        req.Headers.Add("Authorization", $"Bearer {_apiKey}");
-        req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        string body = "";
+        HttpResponseMessage? resp = null;
+        const int MaxRetries = 4;
+        for (int attempt = 0; attempt < MaxRetries; attempt++)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post,
+                "https://openrouter.ai/api/v1/chat/completions");
+            req.Headers.Add("Authorization", $"Bearer {_apiKey}");
+            req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
-        using var resp = await _http.SendAsync(req, ct);
-        var body = await resp.Content.ReadAsStringAsync(ct);
-        if (!resp.IsSuccessStatusCode)
+            resp = await _http.SendAsync(req, ct);
+            body = await resp.Content.ReadAsStringAsync(ct);
+            // Free-tier models are heavily rate-limited (HTTP 429). Retry with
+            // backoff; fail fast on auth/credit errors.
+            if ((int)resp.StatusCode == 429 && attempt < MaxRetries - 1)
+            {
+                await Task.Delay(1500 * (attempt + 1), ct);
+                continue;
+            }
+            break;
+        }
+
+        if (resp is null || !resp.IsSuccessStatusCode)
         {
             // Surface OpenRouter's own error (e.g. 402 credits, 401 auth) instead of a bare 500.
             string detail = body;
@@ -93,7 +108,7 @@ Rules:
                     detail = m.GetString() ?? body;
             }
             catch { /* keep raw body */ }
-            throw new InvalidOperationException($"OpenRouter {resp.StatusCode}: {detail}");
+            throw new InvalidOperationException($"OpenRouter {resp?.StatusCode}: {detail}");
         }
 
         using var doc = JsonDocument.Parse(body);
