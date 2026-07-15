@@ -1,68 +1,54 @@
 # Architecture
 
-> Fill in this section — see comments below.
+## Overview
 
----
+A single FastAPI service (`src/analytics_agent`) owns the data layer, the aggregation pipeline (a small LangGraph), and the HTTP API. A Next.js 15 static export is served by FastAPI at `/app/`. The browser talks only to the backend's `/api/*` JSON endpoints.
 
-## System Overview
-
-<!-- FILL IN: One paragraph describing the system at a high level. Who/what interacts with it? -->
-
-## Component Map
-
-<!-- FILL IN: List the major components and what each does. -->
+The data flow for one refresh:
 
 ```
-[Component A]
-    ↓
-[Component B]   ←→   [External Service]
-    ↓
-[Component C]
+dashboard "Refresh" ──► POST /api/refresh ──► run_pipeline()
+        │                                            │
+        │                                   fetch_sources (graph node)
+        │                                      └─ ConnectorHub.pull_all()
+        │                                           ├─ sample adapter (default)
+        │                                           └─ real adapters (flagged, if key set)
+        │                                   aggregate (graph node)
+        │                                      └─ normalize → SourceRecord rows
+        │                                   compute_funnel (graph node)
+        │                                      └─ 5-stage funnel + KPIs
+        │                                   narrate (graph node, optional LLM)
+        │                                   finalize → write Snapshot + FunnelPoint rows
+        ▼
+   GET /api/funnel, /api/kpis, /api/snapshots, /api/connectors
+        ▼
+   Next.js dashboard renders funnel, KPI tiles, sparkline, connector panel
 ```
 
-## Layers
+## Components
 
-<!-- FILL IN: Describe the layers of the system (e.g., API → Agent Loop → Tools → Storage). -->
-
-| Layer | Responsibility |
-|-------|----------------|
-| <!-- layer --> | <!-- responsibility --> |
+- **`ConnectorHub`** (`tools/connectors/`) — one interface (`BaseConnector.pull() -> list[SourceRecord]`). A `SampleConnector` returns realistic synthetic data so the whole UI works with zero credentials. Six real connectors (`GA4Connector`, `BusinessDbConnector`, `PlayStoreConnector`, `AppStoreConnector`, `InstagramConnector`, `LinkedInConnector`, `FacebookConnector`) exist but each returns "not configured" unless its env key is present. Selected by `provider=auto` resolution (real when key set, else sample).
+- **Aggregation tool** (`tools/aggregate.py`) — normalizes `SourceRecord`s into the funnel stages and KPI set; stores `SourceRecord` (raw audit), `Snapshot` (cached aggregate), `FunnelPoint` (time-series).
+- **Pipeline** (`graph/`) — LangGraph: `fetch_sources → aggregate → compute_funnel → narrate → finalize`.
+- **API** (`api/`) — `health`, `funnel`, `kpis`, `snapshots`, `connectors`, `refresh`, `setup_guide`.
+- **Frontend** (`frontend/`) — `page.tsx` dashboard + `ConnectorSetupPanel` + `RefreshButton`.
 
 ## Data Flow
 
-<!-- FILL IN: Walk through the main data flow from trigger to output. -->
-
-1. Trigger: <!-- how does the agent start? (cron, webhook, user input, etc.) -->
-2. <!-- step 2 -->
-3. <!-- step 3 -->
-4. Output: <!-- what does the agent produce? -->
-
-## External Dependencies
-
-<!-- FILL IN: APIs, services, databases the agent depends on. -->
-
-| Dependency | Purpose | Failure Mode |
-|------------|---------|--------------|
-| <!-- name --> | <!-- what it does --> | <!-- what happens if it's down --> |
+On-demand: a dashboard load issues `GET /api/funnel` (+ kpis, snapshots, connectors). If no fresh snapshot exists (or `Refresh` is pressed), the backend runs `run_pipeline()` which pulls, aggregates, and writes a new `Snapshot` + `FunnelPoint`. Results are cached in SQLite and served until the next refresh.
 
 ## Stack
 
-> This project's concrete technology choices (captured at intake, filled by the spec-writer). The generic, every-project rules — model-naming, DB driver, dev port, test environment — live in `harness/patterns/tech-stack.md`; this section is only what **this** project picked.
+> **Assumed:** Python 3.11 (host has 3.11.15; harness prefers 3.12+ but 3.11 is fully supported by FastAPI/SQLAlchemy/LangGraph). Pinned in `pyproject.toml` as `requires-python = ">=3.11"`.
 
-- **Language:** <!-- FILL IN: e.g., Python 3.12 -->
-- **Agent framework:** <!-- FILL IN: e.g., LangGraph / custom / none -->
-- **LLM provider + model:** <!-- FILL IN: e.g., Anthropic / claude-sonnet-4-6 -->
-- **Backend:** <!-- FILL IN: e.g., FastAPI / none -->
-- **Database + ORM:** <!-- FILL IN: e.g., PostgreSQL + SQLAlchemy 2.0 / none -->
-- **Frontend:** <!-- FILL IN: e.g., Next.js / none -->
-- **Dependency management:** <!-- FILL IN: e.g., uv + pyproject.toml -->
-
-| Key library | Version | Purpose |
-|-------------|---------|---------|
-| <!-- name --> | <!-- ver --> | <!-- purpose --> |
-
-**Avoid:** <!-- FILL IN: libraries/patterns explicitly off-limits, and why -->
-
-## Deployment Model
-
-<!-- FILL IN: How does this run? (local script, cloud function, long-running service, etc.) -->
+- **Language:** Python 3.11
+- **Backend:** FastAPI 0.115+, Uvicorn
+- **Agent framework:** LangGraph (`langgraph`) — pipeline is a 5-node `StateGraph`, compiled once at import
+- **LLM provider:** OpenRouter (`AGENT_OPENROUTER_API_KEY`), model `anthropic/claude-sonnet-4-6` default, configurable via `ANALYTICS_LLM_MODEL`. Insight narration is optional; sample summary shown when key absent.
+- **Database:** SQLite (single-tenant, local — per harness default for local/single-user tools). Driver `sqlite` (stdlib) — declared in `[project.dependencies]`, not dev-only.
+- **ORM:** SQLAlchemy 2.0 (declarative `Mapped` types)
+- **Migrations:** Alembic
+- **Frontend:** Next.js 15 + React 19, static export (`output: 'export'`, `basePath: '/app'`), Tailwind CSS v4 (`@tailwindcss/postcss` + `@source`), served by FastAPI
+- **Dependency management:** uv (Python) / npm (TypeScript)
+- **Observability:** structured stdout logging via `structlog` for every pipeline run (timestamp, stages, latency_ms, error); OpenRouter call logged (presence-only). Never deferred.
+- **Dev port:** 8001 (hard-coded in `__main__.py`, overridable via `PORT`)

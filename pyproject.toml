@@ -1,0 +1,40 @@
+[project]
+name = "analytics-agent"
+version = "0.1.0"
+description = "Full Stack Analytics Agent for #local — unified acquisition+retention funnel across GA4, business DB, Play/App Store, and social."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "langgraph>=0.2",
+    "structlog>=24.1",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+analytics-agent = "analytics_agent.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/analytics_agent"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = ["-q"]
+
+[tool.uv]
+package = true

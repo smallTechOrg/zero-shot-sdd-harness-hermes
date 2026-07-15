@@ -1,34 +1,48 @@
 # Data Model
 
-> Fill in this section — see comments below.
+Entities (SQLAlchemy tables in `src/analytics_agent/db/models.py`):
 
----
+## SourceRecord (raw pull audit trail)
 
-## Storage Technology
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | str (PK, uuid) | |
+| `entity` | str | `#local` |
+| `source` | str | `ga4`, `business_db`, `play_store`, `app_store`, `instagram`, `linkedin`, `facebook`, `sample` |
+| `stage` | str | one of the 5 funnel stages |
+| `count` | int | normalized count for that stage |
+| `captured_at` | timestamp | when pulled |
 
-<!-- FILL IN: What database/storage does this project use and why? -->
+## Snapshot (cached aggregate)
 
-## Entities
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | str (PK, uuid) | |
+| `entity` | str | |
+| `sample` | bool | True when sample adapter produced it |
+| `visit_or_install` | int | |
+| `signup` | int | |
+| `activated` | int | |
+| `retained` | int | |
+| `revenue` | float | |
+| `insight` | str \| None | LLM or sample summary |
+| `created_at` | timestamp | |
 
-<!-- FILL IN: One section per major entity. -->
+## FunnelPoint (time-series)
 
-### Entity: <!-- Name -->
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | str (PK, uuid) | |
+| `entity` | str | |
+| `sample` | bool | |
+| `signup` | int | |
+| `activated` | int | |
+| `retained` | int | |
+| `revenue` | float | |
+| `created_at` | timestamp | |
 
-<!-- FILL IN: What does this entity represent? -->
+## Relationships / lifecycle
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| id | <!-- type --> | yes | Primary key |
-| <!-- field --> | <!-- type --> | <!-- yes/no --> | <!-- description --> |
-
-### Relationships
-
-<!-- FILL IN: How do entities relate to each other? -->
-
-## Data Lifecycle
-
-<!-- FILL IN: When is data created, updated, and deleted? Is anything time-boxed or archived? -->
-
-## Sensitive Data
-
-<!-- FILL IN: What fields contain PII or secrets? How are they protected? -->
+- Every `run_pipeline()` writes N `SourceRecord`s (audit), one `Snapshot` (latest cache), one `FunnelPoint` (trend).
+- `GET /api/funnel` returns the most recent `Snapshot`; `GET /api/snapshots` returns `FunnelPoint`s ordered by time.
+- No deletes in Phase 1 (history is permanent; prune is a later concern).

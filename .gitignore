@@ -27,3 +27,9 @@ data/
 # Logs / OS
 *.log
 .DS_Store
+
+# Playwright artifacts
+frontend/test-results/
+frontend/playwright-report/
+# Next.js auto-generated
+frontend/next-env.d.ts

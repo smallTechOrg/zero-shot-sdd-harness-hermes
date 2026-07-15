@@ -1,32 +1,30 @@
 # UI
 
-> **Boilerplate status:** Delete this file if the agent has no UI. Otherwise, filled in by the spec-writer sub-agent.
+Single screen served at `http://localhost:8001/app/`. Next.js 15 static export, `basePath: '/app'`. Calls only `/api/*`.
 
----
+## Screens / components
 
-## UI Type
+1. **Header** — `#local Analytics`, entity pill, Refresh button (top-right).
+2. **Funnel panel** — 5 horizontal/vertical bars: Visit/Install → Signup → Activated → Retained → Revenue, each with count + % of top. A `SAMPLE DATA` badge when `sample: true`.
+3. **KPI tiles** — Signups, Activated, Retention %, Revenue (from `/api/kpis`).
+4. **Trend sparkline** — revenue (or signups) over `FunnelPoint`s from `/api/snapshots`.
+5. **Connectors panel** — 6 cards (GA4, Business DB, Play, App Store, Instagram, LinkedIn, Facebook). Each shows CONNECTED (green) or NOT CONFIGURED (amber) + a "Set up" button.
+6. **Connector setup modal** — opened by "Set up"; shows ordered steps from `/api/setup_guide`. Clearly labelled: "Phase 2 will make this live."
+7. **Insight panel** — plain-language summary; labelled "sample" when no key.
+8. **Stub chips (clearly labelled)** — Notifications (🔔 "Phase 2"), Scheduled refresh (⏱ "Phase 2"), Real connectors (badge on each card).
 
-<!-- FILL IN: Web dashboard / CLI / chat interface / none -->
+## Interactions
 
-## Views / Screens
+- On load: `GET /api/funnel`, `/api/kpis`, `/api/snapshots`, `/api/connectors` in parallel; render.
+- Refresh: `POST /api/refresh` → refetch all → update funnel/KPIs/sparkline; show toast "Updated".
+- Set up (connector): open modal with guide.
 
-<!-- FILL IN: One section per major view. -->
+## States (every surface)
 
-### Screen: <!-- Name -->
+- **Empty:** first load before any snapshot → show sample funnel (sample adapter guarantees data).
+- **Loading:** skeletons while fetching.
+- **Error:** API error → inline message + Retry, never a stack trace.
 
-**Purpose:** <!-- what the user does here -->
+## Stubs (must be visibly labelled, never look like bugs)
 
-**Key elements:**
-- <!-- element 1 -->
-- <!-- element 2 -->
-
-**Actions available:**
-- <!-- action 1 -->
-
-## Error States
-
-<!-- FILL IN: How does the UI surface errors and loading states to the user? -->
-
-## Tech Stack
-
-<!-- FILL IN: Filled in by spec-writer. E.g., Next.js 15 + React 19 + Tailwind -->
+- Notifications bell, scheduled-refresh toggle, and the six real connectors are all labelled "Phase 2 / not configured yet".

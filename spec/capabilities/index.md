@@ -1,38 +1,9 @@
-# Capabilities Index
+# Capabilities
 
-> **Boilerplate status:** The spec-writer sub-agent creates one file per capability in this directory. Each file describes exactly one discrete thing the agent can do.
+Phase 1 capabilities (the smallest first-time-right win):
 
----
+1. **[Aggregate & Funnel](aggregate-and-funnel.md)** — pull all six sources via one interface, normalize, compute the 5-stage blended funnel + KPIs, cache + time-series.
+2. **[Connector State & Setup Guide](aggregate-and-funnel.md#connector-state--setup-guide)** — each source shows CONNECTED / NOT CONFIGURED; a guided setup flow names the exact env var + where to get it.
+3. **[Live Dashboard](aggregate-and-funnel.md#live-dashboard)** — funnel chart, KPI tiles, time-series sparkline, optional LLM insight panel (sample when no key), Refresh button.
 
-## What Is a Capability?
-
-A capability is a single, discrete action or behavior the agent performs. Examples:
-- "Search the web for companies matching criteria X"
-- "Draft a personalized email given a lead profile"
-- "Send a Slack notification when a threshold is crossed"
-
-## Capabilities in This Project
-
-<!-- FILL IN: List capabilities here as they are defined. Each entry links to its spec file (no number prefix). -->
-
-| Capability | File |
-|-----------|------|
-| <!-- name --> | [name.md](name.md) |
-
-## How to Add a New Capability
-
-Run `/zero-shot-build [description]` on the existing spec. The spec-writer sub-agent will:
-1. Create a new file in this directory (`<name>.md`, no number prefix)
-2. Update this index
-3. Flag any dependencies on existing capabilities
-4. Self-review that it fits the architecture and data model before returning
-
-## Capability File Template
-
-Each capability file should answer:
-- **What it does** (one sentence)
-- **Inputs** (what data it receives)
-- **Outputs** (what it produces)
-- **External calls** (APIs, LLMs, databases it touches)
-- **Error cases** (what can go wrong and how it's handled)
-- **Success criteria** (how we test it)
+Deferred to Phase 2+: real external API calls, live OpenRouter narration, scheduled refresh, notifications.
