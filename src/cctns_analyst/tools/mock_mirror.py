@@ -179,22 +179,24 @@ def execute_select(
     columns = parsed["projection"]
     rows_iter = _apply_projection(rows_iter, columns)
 
-    if parsed["count_star"]:
-        # Single scalar row, e.g., SELECT COUNT(*) AS fir_count FROM …
-        alias = parsed["projection"][0] or "count"
-        if parsed["where"]:
-            count = sum(1 for _ in _apply_where(src, parsed["where"]))
+    if parsed["is_aggregate"]:
+        agg = parsed["agg_name"]
+        alias = parsed["projection"][0]
+        # Apply WHERE first.
+        filtered = list(_apply_where(src, parsed["where"]))
+        if agg in ("count",):
+            value = len(filtered)
         else:
-            count = len(src)
-        return [alias], [(count,)], count
+            raise ValueError(f"aggregate {agg!r} is not implemented by the mock")
+        return [alias], [(value,)], value
 
     if parsed["top"]:
-        raw = list(rows_iter)[: parsed["top"]]
-        bounded = raw[: row_cap]
-    else:
-        raw = list(rows_iter)
-        bounded = raw[: row_cap]
-    return columns, [tuple(r) for r in bounded], len(raw)
+        rows_iter = list(rows_iter)[: parsed["top"]]
+    all_rows = list(rows_iter)
+    bounded = all_rows[: row_cap]
+    # Recompute the true "raw" count (pre-cap) for accurate row_count.
+    raw_count = len(list(_apply_where(src, parsed["where"])))
+    return columns, [tuple(r) for r in bounded], raw_count
 
 
 # --- SELECT parsing -------------------------------------------------------
@@ -205,7 +207,7 @@ def _parse_select(sql: str) -> dict[str, Any]:
     s = sql.strip().rstrip(";").strip()
     # Strip leading "cctns_mirror." qualifier on table.
     # We accept: SELECT [TOP N] <projection> FROM cctns_mirror.<table> [WHERE col op val]
-    # Projection may contain *, COUNT(*), and the trailing "AS alias".
+    # Projection may contain *, COUNT(*), COUNT(col), and the trailing "AS alias".
     pat = re.compile(
         r"^\s*select\s+"
         r"(?:top\s+(?P<top>\d+)\s+)?"
@@ -220,18 +222,27 @@ def _parse_select(sql: str) -> dict[str, Any]:
     top = int(m.group("top")) if m.group("top") else None
     proj_raw = m.group("proj").strip()
     rest = (m.group("rest") or "").strip()
-    count_star = bool(re.match(r"^\s*count\s*\(\s*\*\s*\)\s*(?:as\s+\w+\s*)?$", proj_raw, re.I))
-    if count_star:
-        alias_m = re.search(r"\s+as\s+(\w+)\b", proj_raw, re.I)
-        alias = alias_m.group(1) if alias_m else "count"
+    # Treat any aggregate `FN(...)[ AS alias]` as a scalar.
+    agg_m = re.match(r"^\s*(?P<fn>\w+)\s*\([^)]*\)\s*(?:as\s+(?P<alias>\w+))?\s*$", proj_raw, re.I)
+    is_aggregate = bool(agg_m) and agg_m.group("fn").lower() not in ("select", "from", "where")
+    if is_aggregate:
+        alias = (agg_m.group("alias") or agg_m.group("fn") or "count").lower()
         projection = [alias]
+        # We dispatch on lower-case name later.
+        agg_name = agg_m.group("fn").lower()
+    elif proj_raw.strip() == "*":
+        projection = ["*"]
+        agg_name = ""
     else:
+        # Plain columns
         projection = [c.strip() for c in proj_raw.split(",") if c.strip()]
+        agg_name = ""
     where = _parse_where(rest) if rest else None
     return {
         "top": top,
         "projection": projection,
-        "count_star": count_star,
+        "is_aggregate": is_aggregate,
+        "agg_name": agg_name,
         "table": m.group("table"),
         "where": where,
     }
