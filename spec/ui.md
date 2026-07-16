@@ -1,32 +1,61 @@
-# UI
+# UI — CCTNS Analyst
 
-> **Boilerplate status:** Delete this file if the agent has no UI. Otherwise, filled in by the spec-writer sub-agent.
+> Web dashboard. Single page served at `/app/` by FastAPI.
 
----
+## Frames
 
-## UI Type
+### Primary page — `frontend/src/app/page.tsx`
 
-<!-- FILL IN: Web dashboard / CLI / chat interface / none -->
+A single screen with three regions:
 
-## Views / Screens
+| Region           | Contents                                                        |
+|------------------|-----------------------------------------------------------------|
+| **Header**       | Brand mark · "CCTNS Analyst" · mirror-mode badge (`mock`/`live`)|
+| **Composer**     | Question `<textarea>` + **Ask** button + (stub) “Follow-up” input panel with `Phase 3` placeholder label |
+| **Results**      | Loading skeleton · prose **answer** headline · latency badge · results table (`≤ 100` rows shown) · **Show SQL** toggle reveals the SQL |
+| **Sidebar (stub)**| "Conversation history — **Coming in Phase 2**"                       |
+| **Switch panel (stub)** | "Switch to live CCTNS — **Coming in Phase 3**"               |
+| **Role panel (stub)**   | "Multi-user / role filter — **Coming in Phase 2**"            |
 
-<!-- FILL IN: One section per major view. -->
+### Error template — `frontend/src/app/error.tsx`
 
-### Screen: <!-- Name -->
+A readable error page that does **not** show a stack trace; says what failed,
+why (in plain English) and offers a link back to `/app/`.
 
-**Purpose:** <!-- what the user does here -->
+## States (per `harness/patterns/ui-ux.md`)
 
-**Key elements:**
-- <!-- element 1 -->
-- <!-- element 2 -->
+| State      | What renders                                                |
+|------------|-------------------------------------------------------------|
+| Empty      | Guidance copy: “Ask a question about CCTNS data.”            |
+| Loading    | Skeleton with step-counter badge (“Step 2 of 4 …”).         |
+| Error      | `error.tsx` template with a one-line reason + Retry button. |
+| Ideal      | Answer headline + table + SQL toggle + latency badge.       |
 
-**Actions available:**
-- <!-- action 1 -->
+## Stubs (NEVER mistaken for bugs)
 
-## Error States
+Each stub is a **clearly-labelled** static element:
 
-<!-- FILL IN: How does the UI surface errors and loading states to the user? -->
+- *"Follow-up input — coming in Phase 3"* (greyed-out textarea)
+- *"Conversation history — coming in Phase 2"* (sidebar heading only)
+- *"Switch to live CCTNS — coming in Phase 3"* (toggle labelled disabled)
+- *"Multi-user / role filter — coming in Phase 2"* (selector labelled disabled)
 
-## Tech Stack
+In every stub: `aria-disabled="true"` and a `data-stub="phase-N"` attribute so
+qa-auditor can detect an unlabelled-or-broken-looking stub.
 
-<!-- FILL IN: Filled in by spec-writer. E.g., Next.js 15 + React 19 + Tailwind -->
+## Tech specifics (per `harness/patterns/tech-stack.md`)
+
+- Next.js 15 + React 19 + Tailwind v4 static export (`output: 'export'`,
+  `basePath: '/app'`).
+- `postcss.config.mjs` uses `@tailwindcss/postcss` plugin (NON-OPTIONAL).
+- `globals.css` first two lines: `@source "../";` then `@import "tailwindcss";`
+  (NON-OPTIONAL).
+- All `dev` / `build` / `start` scripts carry
+  `NODE_OPTIONS=--no-experimental-webstorage` (Node-25 SSR safety).
+
+## Code font — markdown rendering
+
+LLM text outputs are rendered through `react-markdown` + `remark-gfm`. Raw
+strings in the answer would render `**bold**` / bullet syntax literally — a
+broken-looking UI. The system prompt requests formatted output (newlines,
+indentation) for any returned code blocks.

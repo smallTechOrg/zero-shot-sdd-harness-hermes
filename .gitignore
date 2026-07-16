@@ -17,6 +17,9 @@ node_modules/
 .next/
 dist/
 build/
+frontend/out/
+playwright-report/
+test-results/
 
 # DB
 *.db

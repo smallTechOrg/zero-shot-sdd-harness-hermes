@@ -1,38 +1,24 @@
-# Capabilities Index
+# Capabilities — CCTNS Analyst
 
-> **Boilerplate status:** The spec-writer sub-agent creates one file per capability in this directory. Each file describes exactly one discrete thing the agent can do.
+A capability is one cohesive unit of behaviour. Each `spec/capabilities/*.md`
+file describes one capability using the standard template. The list below is
+the canonical index — keep it current.
 
----
+## Capability index
 
-## What Is a Capability?
+- [Natural language → SQL](./nl_to_sql.md) — LLM drafts a bounded SELECT.
+- [Execute bounded query](./execute_bounded_query.md) — Row-cap + timeout.
+- [Summarize results](./summarize_results.md) — Prose summary from rows.
+- [Answer question](./answer_question.md) — Orchestrator; owns the primary
+  user journey end-to-end.
 
-A capability is a single, discrete action or behavior the agent performs. Examples:
-- "Search the web for companies matching criteria X"
-- "Draft a personalized email given a lead profile"
-- "Send a Slack notification when a threshold is crossed"
+Phase 2 (planned, defined in `spec/roadmap.md`):
+- Conversation memory (session-scoped turns).
+- Role-based row-level filter.
+- History sidebar.
 
-## Capabilities in This Project
-
-<!-- FILL IN: List capabilities here as they are defined. Each entry links to its spec file (no number prefix). -->
-
-| Capability | File |
-|-----------|------|
-| <!-- name --> | [name.md](name.md) |
-
-## How to Add a New Capability
-
-Run `/zero-shot-build [description]` on the existing spec. The spec-writer sub-agent will:
-1. Create a new file in this directory (`<name>.md`, no number prefix)
-2. Update this index
-3. Flag any dependencies on existing capabilities
-4. Self-review that it fits the architecture and data model before returning
-
-## Capability File Template
-
-Each capability file should answer:
-- **What it does** (one sentence)
-- **Inputs** (what data it receives)
-- **Outputs** (what it produces)
-- **External calls** (APIs, LLMs, databases it touches)
-- **Error cases** (what can go wrong and how it's handled)
-- **Success criteria** (how we test it)
+Phase 3 (planned):
+- Live CCTNS connector (`MssqlMirror` via pyodbc).
+- Token-bucket rate limit.
+- Audit log every read.
+- Switch-to-live panel wiring.
