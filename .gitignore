@@ -30,3 +30,6 @@ data/
 # Logs / OS
 *.log
 .DS_Store
+
+# Hermes tmp sentinel dirs (do not track)
+.hermes-tmp.*/
