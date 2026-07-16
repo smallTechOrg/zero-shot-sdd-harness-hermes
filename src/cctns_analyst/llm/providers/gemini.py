@@ -43,30 +43,37 @@ class GeminiProvider(LLMProvider):
 
     def complete_json(self, *, model: str, system: str, user: str) -> Any:
         client = self._get_client()
-        # We force a JSON response. Gemini returns text; we parse it.
+        # In newer google-genai, use ``GenerateContentConfig(system_instruction=...)``
+        # and a single user ``contents=`` entry. The dict-shape ``contents``
+        # with role=system is rejected as 400.
+        try:
+            from google.genai import types as genai_types  # type: ignore[import-not-found]
+
+            config = genai_types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type="application/json",
+            )
+        except Exception:  # pragma: no cover - older SDK fallback
+            from google.generativeai import types as genai_types  # type: ignore[import-not-found]
+            config = genai_types.GenerationConfig(response_mime_type="application/json")
+            # system instruction is concatenated into user text as a fallback
+            user = f"{system}\n\n{user}"
+
         try:
             response = client.models.generate_content(
                 model=model or self._model_name,
-                contents=[
-                    {"role": "system", "parts": [{"text": system}]},
-                    {"role": "user", "parts": [{"text": user}]},
-                ],
-                config={
-                    "response_mime_type": "application/json",
-                },
+                contents=user,
+                config=config,
             )
         except Exception as exc:  # noqa: BLE001 — propagate via graph state, not raise
-            # zero-rate the key before logging the message
             raise RuntimeError(f"gemini_request_failed: {exc.__class__.__name__}") from exc
         text = getattr(response, "text", None) or _safe_response_text(response)
         if text is None:
             raise RuntimeError("gemini_returned_no_text")
-        # Try JSON
         text = text.strip()
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            # Could be free text — return as-is and let callers degrade.
             return text
 
 

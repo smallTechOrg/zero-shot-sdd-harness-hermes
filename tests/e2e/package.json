@@ -1,0 +1,13 @@
+{
+  "name": "cctns-analyst-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Playwright e2e for the CCTNS analyst frontend",
+  "scripts": {
+    "test": "playwright test tests/e2e/ --reporter=line"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.47.0"
+  }
+}

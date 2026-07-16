@@ -45,3 +45,10 @@ addopts = "-ra"
 markers = [
     "live: tests that require a real LLM key in .env",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-mock>=3.14",
+    "playwright>=1.47",
+]

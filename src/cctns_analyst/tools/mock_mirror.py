@@ -180,18 +180,13 @@ def execute_select(
     rows_iter = _apply_projection(rows_iter, columns)
 
     if parsed["count_star"]:
-        # single scalar row, e.g., SELECT COUNT(*) AS fir_count FROM …
+        # Single scalar row, e.g., SELECT COUNT(*) AS fir_count FROM …
         alias = parsed["projection"][0] or "count"
-        rows = [(len(rows_iter),)] if not parsed["where"] else (
-            [(sum(1 for _ in (_apply_where(src, parsed["where"]))),)]
-        )
-        # When WHERE is present, we have already consumed the generator. Recount.
         if parsed["where"]:
-            rows = [(sum(1 for _ in _apply_where(src, parsed["where"])),)]
+            count = sum(1 for _ in _apply_where(src, parsed["where"]))
         else:
-            rows = [(len(src),)]
-        raw_count = rows[0][0]
-        return [alias], rows, raw_count
+            count = len(src)
+        return [alias], [(count,)], count
 
     if parsed["top"]:
         raw = list(rows_iter)[: parsed["top"]]
@@ -209,24 +204,29 @@ def _parse_select(sql: str) -> dict[str, Any]:
     """Parse a tiny SELECT subset. Returns a dict of bits."""
     s = sql.strip().rstrip(";").strip()
     # Strip leading "cctns_mirror." qualifier on table.
-    m = re.match(
-        r"select\s+(?P<top>top\s+\d+\s+)?(?P<proj>[\w\.\*\,\s\(]+?)\s+from\s+(?:cctns_mirror\.)?(?P<table>\w+)(?P<rest>\s+where\s+.+?)?$",
-        s,
+    # We accept: SELECT [TOP N] <projection> FROM cctns_mirror.<table> [WHERE col op val]
+    # Projection may contain *, COUNT(*), and the trailing "AS alias".
+    pat = re.compile(
+        r"^\s*select\s+"
+        r"(?:top\s+(?P<top>\d+)\s+)?"
+        r"(?P<proj>.+?)"
+        r"\s+from\s+(?:cctns_mirror\.)?(?P<table>\w+)"
+        r"(?P<rest>\s+where\s+.+)?$",
         re.I | re.S,
     )
+    m = pat.match(s)
     if not m:
         raise ValueError(f"unparsable SELECT: {sql!r}")
-    top = int(m.group("top").split()[1]) if m.group("top") else None
+    top = int(m.group("top")) if m.group("top") else None
     proj_raw = m.group("proj").strip()
-    count_star = bool(re.match(r"count\s*\(\s*\*\s\)", proj_raw, re.I))
+    rest = (m.group("rest") or "").strip()
+    count_star = bool(re.match(r"^\s*count\s*\(\s*\*\s*\)\s*(?:as\s+\w+\s*)?$", proj_raw, re.I))
     if count_star:
-        # alias or default name
         alias_m = re.search(r"\s+as\s+(\w+)\b", proj_raw, re.I)
         alias = alias_m.group(1) if alias_m else "count"
         projection = [alias]
     else:
         projection = [c.strip() for c in proj_raw.split(",") if c.strip()]
-    rest = (m.group("rest") or "").strip()
     where = _parse_where(rest) if rest else None
     return {
         "top": top,
