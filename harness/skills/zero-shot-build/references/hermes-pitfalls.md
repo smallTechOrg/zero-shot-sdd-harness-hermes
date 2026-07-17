@@ -11,9 +11,9 @@ Durable, generic lessons from real `/zero-shot-build` runs. Only things that cha
 - **Symptom:** the orchestrator can't spawn code-generator / qa-auditor children, so the build stalls.
 - **Fix:** run inline. agent-builder reads `harness/agents/*.md` as procedure and does the work itself. Don't wait for workers that will never spawn.
 
-### 3. Empty or "you decide" answer at intake
-- **Symptom:** the user replies to an intake question with nothing useful ("whatever", "you decide", blank).
-- **Fix:** treat as "you decide" → pick the lowest-risk default, label it `Assumed:` in the brief. Don't block; a single gentle follow-up is fine, endless re-asking is not.
+### 3. `clarify` empty answer
+- **Symptom:** the user submits with no selection.
+- **Fix:** treat as "you decide" → pick the lowest-risk default, label it `Assumed:` in the brief. Don't re-ask or block.
 
 ### 4. Boot before you hand off; pin the interpreter
 - **Fix:** before writing the Stage 3 handoff, actually boot the server and hit `/health` — write only *verified* run commands. Launch servers with the explicit project interpreter (`.venv/bin/python -m ...`), never a bare `python`/`uvicorn` that a shared agent venv can shadow (silent `ModuleNotFoundError`).
@@ -25,6 +25,6 @@ Durable, generic lessons from real `/zero-shot-build` runs. Only things that cha
 - **Symptom:** calling the LLM once per generated line/token silently burns the user's monthly spend cap (which backoff can't fix).
 - **Fix:** generate the whole artifact in ONE call, then parse and stream the pieces downstream. Applies to any streaming/agentic build.
 
-### 7. At the human gate, the ROOT SESSION owns the run — ASK with a per-feature checklist question
-- **Symptom:** the gate asked "does it work?" but never launched the server or gave a URL, so the user ended up starting/killing processes and hunting ports. The run was bounced back to the user.
-- **Fix:** before the checklist, the root session MUST launch the server (explicit interpreter, **free port**, retry if busy), smoke-test live (health + new endpoints + a real in-browser render with **0 console errors** — the root session can use its own browser), then hand **ONE live URL** + one-line status. Only THEN ask the checklist as a plain-text question (Hermes has no multiple-choice) — list one numbered line per feature shipped and ask the user to reply works/broken per line, never a bare yes/no. If it won't boot, that's a BLOCKER, not a question. The user must never run a terminal command to test. (From PR #8.)
+### 7. At the human gate, the ROOT SESSION owns the run — ASK a per-feature checklist
+- **Symptom:** the gate fired a `clarify` "does it work?" but never launched the server or gave a URL, so the user ended up starting/killing processes and hunting ports. The run was bounced back to the user.
+- **Fix:** before the checklist, the root session MUST launch the server (explicit interpreter, **free port**, retry if busy), smoke-test live (health + new endpoints + a real in-browser render with **0 console errors** — the root session can use its own browser), then hand **ONE live URL** + one-line status. Only THEN run the checklist via `clarify` — multi-select is NOT available in Hermes, so ask one single-select question per feature shipped (Works / Broken / Didn't try), load-state first — never one bare overall verdict. If it won't boot, that's a BLOCKER, not a question. The user must never run a terminal command to test. (From PR #8.)

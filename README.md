@@ -53,7 +53,7 @@ zero-shot-build An agent that monitors my Shopify store for low-inventory produc
 
 (The skills live at `harness/skills/<name>/SKILL.md` — ask Hermes to read and follow one, or install them into `~/.hermes/skills/` for typed slash commands. See `.hermes.md`.)
 
-Intake asks questions one at a time in plain language — Hermes has no multiple-choice questions, so it asks as many follow-up questions as it needs (scope, stack, API keys → fill `.env`), then the agent builds phase by phase and stops at each boundary for you to test.
+Intake asks multiple-choice questions via the Hermes `clarify` tool — single-select only (no multi-select in Hermes), so it asks as many questions as it needs; if `clarify` isn't available it falls back to plain-text questions one at a time (scope, stack, API keys → fill `.env`). Then the agent builds phase by phase and stops at each boundary for you to test.
 
 ---
 

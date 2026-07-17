@@ -165,7 +165,7 @@ If requirements are unclear:
 2. State your specific questions to the user
 3. Ask the user — do not guess
 
-Hermes has **no multiple-choice questions**: ask plain-language questions one at a time, and always consider asking more questions — cover one topic per question and keep following up until nothing is ambiguous.
+Prefer the `clarify` tool (multiple-choice). It is **single-select only — Hermes has no multi-select** — so ask MORE questions, one topic each, rather than packing options into one. If `clarify` fails to load (e.g. Hermes on a plain command line), fall back to plain-text questions asked ONE AT A TIME — never throw all the questions at the user together. Keep following up until nothing is ambiguous.
 
 If the spec is ambiguous:
 1. State the ambiguity

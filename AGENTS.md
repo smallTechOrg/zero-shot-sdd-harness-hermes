@@ -42,7 +42,7 @@ harness/rules/git.md
 
 ## If the Spec Is Not Ready
 
-Tell the user to run **`/zero-shot-build [their idea]`**. That skill runs intake — the only interactive setup step. Hermes has no multiple-choice questions, so intake asks plain-language questions one at a time and asks as many follow-up questions as needed, and asks the user to fill `.env` with the required API keys/secrets. Once intake completes, the **agent-builder** orchestrator runs design → scaffold → build, one phase per invocation. It is autonomous *within* a phase and stops at each phase boundary for a **human testing gate** — the user tests the increment before the next phase starts. Each phase delivers the smallest user-testable win, built first-time-right on the tested path.
+Tell the user to run **`/zero-shot-build [their idea]`**. That skill runs intake — the only interactive setup step. Intake asks multiple-choice questions via the Hermes `clarify` tool (single-select only — no multi-select, so it asks more questions to cover the same ground; if `clarify` fails to load, it falls back to plain-text questions asked one at a time), and asks the user to fill `.env` with the required API keys/secrets. Once intake completes, the **agent-builder** orchestrator runs design → scaffold → build, one phase per invocation. It is autonomous *within* a phase and stops at each phase boundary for a **human testing gate** — the user tests the increment before the next phase starts. Each phase delivers the smallest user-testable win, built first-time-right on the tested path.
 
 ## Skills (entry points)
 
@@ -62,7 +62,7 @@ These are the entry points. All are manual (`disable-model-invocation: true`). E
 - Each phase is tested by the human before the next phase starts — stop at the phase boundary, hand off the test instructions, and wait for the user
 - Tight scope, first-time-right — each phase is the smallest user-testable win and must work the first time the user tests it; zero rough edges on the tested path
 - Tests and evals run against the real LLM/API using keys from `.env` — never gate the build on offline/stubbed runs
-- When in doubt, ask at intake — do not guess requirements. Hermes has no multiple-choice questions: ask plain-language questions one at a time, and always consider asking more questions when anything is ambiguous. Once intake completes, build a phase autonomously and stop for the human testing gate
+- When in doubt, ask at intake — do not guess requirements. Prefer the `clarify` tool (multiple-choice, single-select only — no multi-select in Hermes, so ask MORE questions to cover the ground); if `clarify` doesn't load, ask plain-text questions one at a time, never all at once. Once intake completes, build a phase autonomously and stop for the human testing gate
 
 ## The skeleton in `src/`
 

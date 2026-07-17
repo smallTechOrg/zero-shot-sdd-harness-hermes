@@ -1,72 +1,73 @@
 ---
 name: zero-shot-build
-description: Turn a zero-shot idea into a perfectly-working, thoroughly-tested, spec-driven agent. One intake stage (which also collects the API keys into .env), then the agent-builder builds one phase at a time — autonomous within a phase, with a human testing gate between phases. Also used to add a new capability to an existing agent.
+description: Turn a zero-shot idea into a perfectly-working, thoroughly-tested, spec-driven agent. One intake round (which also collects the API keys into .env), then the agent-builder builds one phase at a time — autonomous within a phase, with a human testing gate between phases. Also used to add a new capability to an existing agent.
 argument-hint: [your idea]
 disable-model-invocation: true
 allowed-tools: Bash(git*) Bash(gh*)
 ---
 
-You run the human channel — intake, then the testing gate at every phase boundary — and hand the building off to the **agent-builder** orchestrator. The idea is in `$ARGUMENTS`. **If `$ARGUMENTS` is empty, ask the user in plain text to describe their idea / the problem they want to solve, and WAIT for their free-text reply before doing anything else.** Never solicit, suggest, or pick the idea yourself — the idea must come from the user as their own text. Only once you have the idea do you move to Stage 1 intake. Goal: **one prompt → a perfectly-working, thoroughly-tested agent, one user-testable phase at a time.**
+You run the human channel — intake, then the testing gate at every phase boundary — and hand the building off to the **agent-builder** orchestrator. The idea is in `$ARGUMENTS`. **If `$ARGUMENTS` is empty, ask the user in plain text to describe their idea / the problem they want to solve, and WAIT for their free-text reply before doing anything else.** Do NOT load `clarify` to solicit, suggest, or pick the idea — the idea must come from the user as their own text. Only once you have the idea do you move to Stage 1 intake. Goal: **one prompt → a perfectly-working, thoroughly-tested agent, one user-testable phase at a time.**
 
 **Autonomy model:** autonomous *within* a phase; a **human testing gate between phases**. Intake is the only interactive SETUP step; after it, agent-builder builds a phase end-to-end without pausing, then returns a test-handoff. You present the handoff, handhold the user through testing, and only proceed to the next phase on the user's go. agent-builder pauses mid-phase only on a hard blocker (e.g. a required key still missing from `.env`).
 
 ## Stage 1 — Intake (the only interactive setup step)
-
-**Hermes has no multiple-choice questions.** All intake questions are plain-language, free-text questions. Ask a small batch (2–4 questions) per round, wait for the user's reply, then ask the next round informed by their answers. Because you cannot hand the user a checklist of options, **always err toward asking MORE questions** — one topic per question, concrete example answers embedded in the question text ("e.g. …") so a non-technical user knows what kind of answer you're looking for.
 
 Intake has **two fixed sections and a variable middle**:
 
 1. **Product rounds (variable, minimum 5)** — all product questions, progressively deeper. You keep going until you have resolved every dimension that would force a design decision in Phase 1. Five rounds is the floor; complex ideas may need 6, 7, or more. Each round covers a different dimension and must not repeat covered ground.
 2. **Technical round (fixed, always last)** — one round of build-blockers only (LLM provider, stack, access method).
 
-The API key prompt is the only additional manual step.
+All rounds use `clarify`; the API key prompt is the only additional manual step. **`clarify` questions are single-select — multi-select is NOT available in Hermes.** Where a multi-select checklist would have let the user tick several options, ask MORE single-select questions instead — one dimension per question, with combined options ("Both A and B") where natural. Always err toward asking more questions rather than cramming choices into one.
 
-**How to decide when to stop product rounds:** After each round, ask yourself: *"Is there any dimension — interaction model, state/memory, features, constraints, edge cases, observability, integrations — that, if left unresolved, would force spec-writer to guess?"* If yes: write another product round on that dimension. If no: move to the technical round. Err on the side of one more round rather than handing off an ambiguous brief — with free-text questions, more (smaller) questions beat fewer (compound) ones.
+**Fallback when `clarify` doesn't load** (it can fail to load when Hermes runs on a plain command line): ask the questions in **plain text, ONE AT A TIME** — ask one question, wait for the user's reply, then ask the next. Never dump a whole round of questions in a single message. Prefer the dynamic `clarify` tool whenever it is available; the plain-text one-by-one flow is only the fallback.
+
+**How to decide when to stop product rounds:** After each round, ask: *"Is there any dimension — interaction model, state/memory, features, constraints, edge cases, observability, integrations — that, if left unresolved, would force spec-writer to guess?* If yes: write another product round on that dimension. If no: move to the technical round. Err on the side of one more round rather than handing off an ambiguous brief.
 
 **The golden rule: Phase 1 is the smallest user-testable quick win.** Richer intake sharpens *which* slice to build first — it does not license a bigger Phase 1. More rounds ≠ bigger scope; it means better-scoped scope.
 
-**Precondition: you already have the user's idea as their own free text** (from `$ARGUMENTS` or the plain-text prompt above). Never generate or propose the idea itself.
+**Precondition: you already have the user's idea as their own free text** (from `$ARGUMENTS` or the plain-text prompt above). Never use `clarify` to generate or propose the idea itself.
 
-**The cardinal rule across ALL rounds: every question and every example you embed must be specific to THIS idea.** After Round 1 you know the idea category — use it. For a data analyst agent, a Round 2 question should read like *"How long does one session last — e.g. do you upload a file, ask one question and leave, or keep asking questions against the same data across days?"* — not a generic *"Is it stateful?"*. A user must instantly recognise every question as being about their thing. Generic questions are a failure.
+**The cardinal rule across ALL five rounds: every question and every option must be specific to THIS idea.** After Round 1 you know the idea category — use it. For a data analyst agent, Round 2 options should be things like "persistent sessions with conversation history" and "multi-file joins across uploaded datasets" — not generic buckets like "stateful" or "multi-entity". A user must instantly recognise every option as being about their thing. Generic options are a failure.
 
 ---
 
 ### Round 1 — What is the idea? (4 questions)
 
 1. Acknowledge the idea in one sentence.
-2. Ask **4 plain-language questions**, no technical jargon, each with 2–3 idea-specific example answers embedded ("e.g. …"). Pure product questions.
+2. Load the question tool: `clarify` with query `select:clarify`.
+3. Ask **4 questions** via `clarify`, single-select each (multi-select is not available — split a dimension into additional questions when one pick can't capture it). Plain, friendly language — no technical jargon. Pure product questions.
 
-   Four themes — adapt wording and all examples to the idea:
-   - **What it works on** — the data, content, or domain it processes. Be concrete: not "documents" but e.g. "CSV exports from our CRM", "raw survey responses", "GitHub PR diffs".
-   - **What it produces** — the output or action it delivers. Be concrete: e.g. "an interactive chart I can explore", "a ranked list with reasons", "a cleaned file ready to re-upload".
-   - **Usage pattern** — who uses it, how often, in what context. E.g. "just me, a few times a day", "my whole team on-demand", "runs automatically on a trigger", "our customers use it directly".
-   - **Non-negotiables** — always mention examples like: "data can't leave my machine / this server", "keep costs very low", "must connect to [something they mentioned]", or "none — just build it well".
+   Four themes — adapt wording and all options to the idea:
+   - **What it works on** *(4 idea-specific options)* — the data, content, or domain it processes. Be concrete: not "documents" but "CSV exports from our CRM", "raw survey responses", "GitHub PR diffs".
+   - **What it produces** *(4 idea-specific options)* — the output or action it delivers. Be concrete: not "a result" but "an interactive chart I can explore", "a ranked list with reasons", "a cleaned file ready to re-upload".
+   - **Usage pattern** *(4 options)* — who uses it, how often, in what context. E.g. "Just me, a few times a day", "My whole team on-demand", "Runs automatically on a trigger", "Our customers use it directly".
+   - **Non-negotiables** *(4 options)* — always offer at least: "My data can't leave my machine / this server", "Keep costs very low", "Must connect to [something they mentioned]", "None — just build it well".
 
 ---
 
 ### Round 2 — How users interact (4 questions)
 
-3. Read Round 1 answers carefully. You now know the idea category (data analysis, email triage, code review, etc.). Write ALL questions and examples as if you are a product designer who has used tools exactly like this.
-4. Ask **4 questions** covering these interaction-model dimensions — all examples specific to the idea:
+4. Read Round 1 answers carefully. You now know the idea category (data analysis, email triage, code review, etc.). Write ALL questions and ALL options for this round as if you are a product designer who has used tools exactly like this.
+5. Load `clarify`. Ask **4 questions**, single-select each (multi-select is not available — split a dimension into additional questions when one pick can't capture it). Cover these four interaction-model dimensions — all options must be specific to the idea:
 
-   - **Session model** — how long does one "conversation" last? E.g. for a data analyst agent: upload a file, ask one question, done — vs. upload once and ask many questions — vs. return to the same dataset across days — vs. runs automatically and you review results.
-   - **Memory & state** — what should carry across turns or sessions? E.g.: conversation history, uploaded datasets staying loaded, derived/cleaned datasets, an annotatable global context (column descriptions, business rules), or nothing — fresh start every time.
-   - **Multi-item handling** — one thing at a time or many? E.g.: one file at a time, multiple files to join/compare, a folder treated as one dataset, or auto-picking the right file from a library.
-   - **When things go wrong** — what should it do when it can't answer confidently? E.g.: ask a clarifying question first, give a best guess and flag the uncertainty, show what it tried and where it got stuck, or retry a different approach automatically.
+   - **Session model** — how long does one "conversation" last? E.g. for a data analyst agent: "I upload a file, ask one question, done", "I upload once and ask many questions in a session", "I return to the same dataset across multiple days", "It runs automatically and I review results".
+   - **Memory & state** — what should carry across turns or sessions? E.g. for a data analyst agent: "The conversation history (what I asked before)", "The uploaded datasets stay loaded", "Derived/cleaned datasets I created during the session", "A global context I can annotate (column descriptions, business rules)", "Nothing — fresh start every time".
+   - **Multi-item handling** — does it work with one thing at a time or many? E.g. for a data analyst agent: "One file at a time", "Multiple files I can join or compare", "A folder of related files treated as one dataset", "It picks the right file automatically from my library".
+   - **When things go wrong** — what should it do when it can't answer confidently? E.g. for a data analyst agent: "Ask me a clarifying question before running", "Give me its best guess and flag the uncertainty", "Show me what it tried and where it got stuck", "Retry with a different approach automatically".
 
-   **Skip any question Round 1 already answered.** Do not ask for information you already have. If an answer is vague, ask a follow-up before moving on.
+   **Skip any question if Round 1 already answered it.** Do not ask for information you already have.
 
 ---
 
 ### Round 3 — Feature depth (4 questions)
 
-5. Read Rounds 1–2. This round uncovers what makes the agent genuinely powerful vs. a toy. Frame every question with idea-specific concrete examples — not abstract categories.
-6. Ask **4 questions** covering these feature-depth dimensions:
+6. Read Rounds 1–2. You now know what the agent processes and how users interact with it. This round uncovers what makes the agent genuinely powerful vs. a toy. Write ALL options as idea-specific concrete features — not abstract categories.
+7. Load `clarify`. Ask **4 questions**, single-select each (multi-select is not available — split a dimension into additional questions when one pick can't capture it). Cover these four feature-depth dimensions:
 
-   - **Analysis / reasoning depth** — how hard should it work on each request? E.g.: one fast LLM call, multi-step reasoning (try code, see result, try again), iterate until the right answer, or plan a full strategy before executing.
-   - **Output richness** — what forms should results take? E.g.: plain text with key numbers, interactive charts, a summary table alongside the prose, an exportable file (CSV, cleaned dataset, report).
-   - **Proactive intelligence** — should it do anything without being asked? E.g.: nothing, suggest follow-up questions, flag anomalies/data-quality issues it notices, auto-profile new data on upload.
-   - **Integration surface** — what else does it connect to or produce for? E.g.: standalone, save results back to a library, export to Slack/email/dashboard, embed in an existing tool.
+   - **Analysis / reasoning depth** — how hard should it work on each request? E.g. for a data analyst agent: "Fast answer — one LLM call, no iteration", "Multi-step reasoning — tries code, sees result, tries again", "Iterative until it finds the right answer (up to N steps)", "Plans a full analysis strategy before executing".
+   - **Output richness** — what forms should results take? E.g. for a data analyst agent: "Plain text answer with key numbers", "Interactive charts I can zoom and filter", "A summary table alongside the prose", "An exportable file (CSV, cleaned dataset, report)".
+   - **Proactive intelligence** — should it do anything without being asked? E.g. for a data analyst agent: "No — only answers what I ask", "Suggests 2–3 follow-up questions after each answer", "Flags anomalies or data-quality issues it notices while answering", "Auto-profiles a new dataset when I upload it".
+   - **Integration surface** — what else does it connect to or produce for? E.g. for a data analyst agent: "Standalone — no integrations needed", "Saves derived/cleaned datasets back to my library", "Exports to Slack / email / dashboard", "Embeds in our existing data tool".
 
    **Skip any question if already answered.** Do not repeat covered ground.
 
@@ -74,30 +75,30 @@ The API key prompt is the only additional manual step.
 
 ### Round 4 — Constraints & scale (3 questions)
 
-7. Read Rounds 1–3. This round surfaces hard constraints that would invalidate a design decision if missed. Give specific, concrete examples — not vague categories.
-8. Ask **3 questions**:
+8. Read Rounds 1–3. This round surfaces hard constraints that would invalidate a design decision if missed. Write ALL options as specific, concrete limits — not vague categories.
+9. Load `clarify`. Ask **3 questions**, single-select each (multi-select is not available — split a dimension into additional questions when one pick can't capture it):
 
-   - **Data scale & performance** — how much data and how fast? E.g.: small files where latency doesn't matter, up to 100 MB with answers under 30s, millions of rows needing sampling/streaming, multiple concurrent users.
-   - **Privacy & data residency** — where can data go? E.g.: everything stays on the machine/server (no cloud LLM calls), LLM calls OK but raw data rows never leave, cloud storage and APIs fine, or compliance requirements (SOC 2, GDPR, HIPAA).
-   - **Reliability bar** — what's the quality/trust bar? E.g.: experimental prototype, production-ready decisions, an audit trail of what the agent did and why, access control per user.
+   - **Data scale & performance** — how much data and how fast? E.g. for a data analyst agent: "Small files, a few MB, latency doesn't matter", "Up to 100 MB CSVs, answer in under 30s", "Millions of rows — needs sampling or streaming", "Multiple users querying concurrently".
+   - **Privacy & data residency** — where can data go? Options: "Everything must stay on my machine / our server (no cloud LLM API calls)", "LLM API calls are OK but raw data rows must never leave", "Cloud storage and APIs are fine", "We have compliance requirements (SOC 2, GDPR, HIPAA)".
+   - **Reliability bar** — what's the quality/trust bar? Options: "Experimental / prototype — imperfect answers OK", "Production-ready — I'll act on the answers", "Needs an audit trail of what the agent did and why", "Needs access control — different users see different data".
 
 ---
 
 ### Round 5 — Observability, trust & transparency (3–4 questions)
 
-9. Read Rounds 1–4. This round covers what users need to see in order to trust and debug the agent — often skipped but critical for agents that users depend on.
-10. Ask **3–4 questions**:
+10. Read Rounds 1–4. This round covers what users need to see in order to trust and debug the agent — often skipped but critical for agents that users depend on.
+11. Load `clarify`. Ask **3–4 questions**, single-select each (multi-select is not available — split a dimension into additional questions when one pick can't capture it):
 
-    - **Reasoning visibility** — should users see how the agent reached its answer? E.g.: just the answer, the code it ran (collapsible), each step it tried, or the full reasoning chain.
-    - **Usage & cost awareness** — should users see what the agent is spending? E.g.: hidden, tokens per query, estimated cost per query, a running daily total.
-    - **Agent health & progress** — should users see the agent working? E.g.: a spinner, a step counter, a progress bar + timer, streamed partial answers.
-    - **Logging & audit** — how much is recorded server-side? E.g.: nothing persistent, a query/answer log file, full run history in the database, a complete audit trail (who asked what, what code ran, what was stored).
+    - **Reasoning visibility** — should users see how the agent reached its answer? E.g. for a data analyst agent: "No — just show me the answer", "Show me the code it ran (collapsible)", "Show me each step — what it tried, what failed, what worked", "Show me the full reasoning chain".
+    - **Usage & cost awareness** — should users know what the agent is spending? E.g. for a data analyst agent: "No — hide this", "Show tokens used per query", "Show estimated cost per query", "Show a running daily total".
+    - **Agent health & progress** — should users see the agent working? E.g. for a data analyst agent: "Just a spinner is fine", "Show a step counter (Step 3 of 6)", "Show a progress bar + elapsed timer", "Stream partial answers as they arrive".
+    - **Logging & audit** — how much should be recorded server-side? E.g.: "Nothing persistent", "Log each query and answer to a file", "Store full run history in the database with timestamps", "Full audit trail: who asked what, what code ran, what result was stored".
 
 ---
 
 ### Additional product rounds (as many as needed)
 
-After Round 5, check: *"Is there any dimension that would force spec-writer to guess?"* If yes, write another product round on that exact dimension — asking more questions is always preferred over guessing. Common dimensions that spill over:
+After Round 5, check: *"Is there any dimension that would force spec-writer to guess?"* If yes, write another product round on that exact dimension. Common dimensions that spill over:
 
 - **Edge cases & error handling** — what happens when input is malformed, the LLM is wrong, an integration fails, or the user asks something outside scope?
 - **Collaboration & sharing** — single user, shared team workspace, or multi-tenant with isolation?
@@ -112,7 +113,7 @@ Keep going until the brief you'll write in the synthesis step would let spec-wri
 ### Technical round — What do we need to build it? (3–4 questions, always last)
 
 Read all prior rounds. Now ask the **technical build questions** — only genuine blockers, 3–4 total:
-- **LLM provider** — offer **OpenRouter (primary/recommended — one key, any model)**, or direct **Anthropic**, **Gemini**, or **Other / self-hosted**. This drives which key the user sets. Default to OpenRouter when the user has no preference.
+- **LLM provider** *(single-select)* — offer: **OpenRouter (recommended — one key, any model)**, **Anthropic (API key)**, **Gemini (API key)**, **Other / self-hosted**. OpenRouter is the primary option and the default when the user has no preference. This drives which key the user sets.
 - **Stack preference** — language, database? ("No preference" → Python + SQLite defaults for local/prototype tools, PostgreSQL for production-grade, documented as assumptions.)
 - **How will they access it?** — Web UI in a browser, CLI in the terminal, REST API, scheduled/automated job. Drives whether to build a frontend.
 - **One follow-up** from prior rounds only if something would force a mid-build pause — skip if everything is clear.
@@ -140,20 +141,22 @@ Phase 1 is the smallest working win: real on the one core path, with clearly-lab
    b. If the phase has migrations: `alembic upgrade head`
    c. `venv/bin/python -m src` with `run_in_background: true`
    d. Health-check with retry: `for i in {1..10}; do curl -sf http://localhost:8001/health && break || sleep 2; done` — wait for the server before presenting the gate. If it never responds → route immediately to qa-auditor (boot failure), do not present the URL.
-2. Present the handoff as **phase release notes**: the live URL, what was built this phase, what to click / type / look at, the expected result, which parts are clearly-labelled stubs vs real (a stub must never read as a bug), and what the next phase adds. No run commands in the handoff — the app is already serving.
-3. Ask for the verdict as a **plain-text checklist question — never a single yes/no.** Hermes has no
-   multi-select, so write the checklist INTO the question and ask the user to reply against each line,
-   covering both load-state and one line per testable feature this phase shipped. E.g.:
-   - *"Is the app loading at [URL]? Then, for each of these, tell me works / broken / didn't try:
-     1) main view renders, 2) core action works, 3) output is correct, 4) feedback/hints work,
-     5) streaming works."*
-   A per-feature reply tells you *which* parts passed and *which* failed in one answer — a single
-   verdict throws that away. If anything is unclear in their reply, ask a follow-up question. If the
-   app didn't load or nothing worked, route to qa-auditor.
-4. Route on their answers:
+2. Load the question tool: `clarify` with query `select:clarify` (before asking). If it fails to load, fall back to plain-text questions asked one at a time.
+3. Present the handoff as **phase release notes**: the live URL, what was built this phase, what to click / type / look at, the expected result, which parts are clearly-labelled stubs vs real (a stub must never read as a bug), and what the next phase adds. No run commands in the handoff — the app is already serving.
+4. Ask via `clarify` — **a per-feature checklist, never ONE overall verdict.** Multi-select is NOT
+   available in Hermes, so run the checklist as a SERIES of single-select questions — more questions,
+   not fewer — derived from THIS phase's success criteria:
+   - First: *"Is the app loading at [URL]?"* → **"Yes, I can see it"** / **"No — error or blank page"**
+   - Then ONE question per testable feature the phase shipped (e.g. *"Does the main view render?"*,
+     *"Does the core action work?"*, *"Is the output correct?"*, *"Do feedback/hints work?"*,
+     *"Does streaming work?"*), each → **"Works"** / **"Broken"** / **"Didn't try"**.
+   Asking one question per feature tells you *which* parts passed and *which* failed — a single
+   overall verdict throws that away. If the app didn't load or every feature comes back "Broken",
+   route to qa-auditor.
+5. Route on their answers:
    - App didn't load → qa-auditor (boot failure), fix, re-present.
    - Any negative verdict → capture what they saw, then delegate to **zero-shot-fix** — pass the user's description, the phase context, the live URL, and any qa-auditor diagnosis already in context (file:line + SPEC/CODE classification) so it can skip re-diagnosis. It owns diagnose → fix → verify → commit + push autonomously, using the **scoped gate** for small CODE fixes (qa-auditor verifies only the changed surface + a real-key smoke call — not the full suite/E2E). When it returns VERIFIED, rebuild + restart the running app and **re-present** the gate. Loop until satisfied.
-   - Positive only → ask in plain text: **"Ready for Phase 2, or is there one more thing to fix first?"** "One more thing" → route as negative above. "Yes" → Stage 4.
+   - Positive only → **"Ready for Phase 2?"** → **"Yes, let's go"** / **"One more thing first"**. "One more thing" → route as negative above. "Yes" → Stage 4.
 
 ## Stage 4 — Per remaining phase (build → gate, repeat)
 
