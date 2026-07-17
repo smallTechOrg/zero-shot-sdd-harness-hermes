@@ -37,7 +37,7 @@ A starting point for building AI agents spec-first. The repo ships with:
 ### Step 1 — Clone
 
 ```bash
-git clone https://github.com/smallTechOrg/hermes-harness.git my-agent
+git clone https://github.com/smallTechOrg/zero-shot-hermes-harness.git my-agent
 cd my-agent
 ```
 
