@@ -1,6 +1,6 @@
 # AI Agent Rules
 
-**These rules apply to every Claude Code session in this repo.**
+**These rules apply to every Hermes session in this repo.**
 
 Read this file completely before doing anything else.
 
@@ -51,9 +51,9 @@ Complete all steps in order before writing any code:
 - [ ] Read `spec/roadmap.md` — know what you're building
 - [ ] Check if the spec is complete (no `<!-- FILL IN -->` markers in product spec files)
   - If incomplete: tell the user to run `/zero-shot-build`; do not write application code
-- [ ] If spec is complete: read the full spec manifest in `CLAUDE.md`
+- [ ] If spec is complete: read the full spec manifest in `AGENTS.md`
 - [ ] Run `git status` — working tree must be clean before starting
-- [ ] **Branch from the current HEAD**: `base=$(git rev-parse --abbrev-ref HEAD)` then `git checkout -b feature/<slug>-v0.1` — branch from wherever you are so the build dogfoods THIS harness version; never `git checkout main` first (see `harness/rules/git.md`)
+- [ ] **Branch from the current HEAD**: `base=$(git rev-parse --abbrev-ref HEAD)` then `git checkout -b feature/<slug>-v0.1` — the slug must be unique (check `git branch -a`; if the name exists, add a differentiating suffix). Branch from wherever you are so the build dogfoods THIS harness version; never `git checkout main` first, and never commit directly on `main` (see `harness/rules/git.md`)
 - [ ] **Create the project directory** `<agent-slug>/` if it doesn't exist — never write agent code into the boilerplate root
 - [ ] Confirm `.env` exists and contains the required API keys/secrets (requested at intake) — tests and the build run against the real LLM/API using these keys
 - [ ] Confirm which phase you are implementing (see `harness/patterns/phases.md`)
@@ -164,6 +164,8 @@ If requirements are unclear:
 1. Stop
 2. State your specific questions to the user
 3. Ask the user — do not guess
+
+Hermes has **no multiple-choice questions**: ask plain-language questions one at a time, and always consider asking more questions — cover one topic per question and keep following up until nothing is ambiguous.
 
 If the spec is ambiguous:
 1. State the ambiguity

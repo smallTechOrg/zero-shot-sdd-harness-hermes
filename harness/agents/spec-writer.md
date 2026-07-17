@@ -65,7 +65,7 @@ Defaults when intake is silent:
 
 - **Language:** Python 3.12+ for agent/data work; TypeScript for UI-heavy projects.
 - **Agent framework:** LangGraph for multi-step / conditional flows; a simple loop for linear tool-calling; none for a single LLM call.
-- **LLM:** Anthropic Claude by default — Opus 4.8 = `claude-opus-4-8`, Sonnet 4.6 = `claude-sonnet-4-6`, Haiku 4.5 = `claude-haiku-4-5-20251001`, Fable 5 = `claude-fable-5`. Pick per node by the latency-vs-quality trade-off; keep it env-configurable.
+- **LLM:** OpenRouter by default (one key, any model; provider-prefixed names like `anthropic/claude-sonnet-4-6`, `google/gemini-3.1-pro`); direct Anthropic or Gemini when the user chose them at intake. Pick per node by the latency-vs-quality trade-off; keep it env-configurable.
 - **Database:** honor the stated preference; else PostgreSQL for anything shared/production, SQLite only for an explicitly local / single-user tool.
 - **Backend:** REST → FastAPI. **Frontend:** web UI → Next.js 15 + React 19.
 - **Dependency management:** uv (Python) / npm (TypeScript).

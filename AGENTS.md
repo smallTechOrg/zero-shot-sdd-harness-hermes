@@ -1,4 +1,4 @@
-# Claude Code — Entry Point
+# Hermes — Entry Point
 
 This is a spec-driven AI agent boilerplate. Read this file first, then follow the instructions below.
 
@@ -42,7 +42,7 @@ harness/rules/git.md
 
 ## If the Spec Is Not Ready
 
-Tell the user to run **`/zero-shot-build [their idea]`**. That skill runs one intake round — the only interactive setup step. It may ask additional clarifying questions, and asks the user to fill `.env` with the required API keys/secrets. Once intake completes, the **agent-builder** orchestrator runs design → scaffold → build, one phase per invocation. It is autonomous *within* a phase and stops at each phase boundary for a **human testing gate** — the user tests the increment before the next phase starts. Each phase delivers the smallest user-testable win, built first-time-right on the tested path.
+Tell the user to run **`/zero-shot-build [their idea]`**. That skill runs intake — the only interactive setup step. Hermes has no multiple-choice questions, so intake asks plain-language questions one at a time and asks as many follow-up questions as needed, and asks the user to fill `.env` with the required API keys/secrets. Once intake completes, the **agent-builder** orchestrator runs design → scaffold → build, one phase per invocation. It is autonomous *within* a phase and stops at each phase boundary for a **human testing gate** — the user tests the increment before the next phase starts. Each phase delivers the smallest user-testable win, built first-time-right on the tested path.
 
 ## Skills (entry points)
 
@@ -62,11 +62,11 @@ These are the entry points. All are manual (`disable-model-invocation: true`). E
 - Each phase is tested by the human before the next phase starts — stop at the phase boundary, hand off the test instructions, and wait for the user
 - Tight scope, first-time-right — each phase is the smallest user-testable win and must work the first time the user tests it; zero rough edges on the tested path
 - Tests and evals run against the real LLM/API using keys from `.env` — never gate the build on offline/stubbed runs
-- When in doubt, ask at intake — do not guess requirements; once intake completes, build a phase autonomously and stop for the human testing gate
+- When in doubt, ask at intake — do not guess requirements. Hermes has no multiple-choice questions: ask plain-language questions one at a time, and always consider asking more questions when anything is ambiguous. Once intake completes, build a phase autonomously and stop for the human testing gate
 
 ## The skeleton in `src/`
 
-`src/` is the **opinionated baseline** — a working FastAPI + LangGraph + SQLite + Anthropic agent whose capability slot is `transform_text`. Tests pass out of the box. Generators extend this in place — they never copy or rename. The capability slot is:
+`src/` is the **opinionated baseline** — a working FastAPI + LangGraph + SQLite agent (LLM via OpenRouter by default; Anthropic/Gemini direct also supported) whose capability slot is `transform_text`. Tests pass out of the box. Generators extend this in place — they never copy or rename. The capability slot is:
 
 - `src/graph/nodes.py` — `transform_text` node → replace with your capability logic
 - `src/prompts/transform.md` → replace with your system prompt
@@ -85,4 +85,4 @@ Everything else (graph structure, runner, API, DB session, settings, test fixtur
 | code-generator | Implements ONE independent slice (backend `src/`, frontend `frontend/`, or both) plus tests — spawned in parallel, one per slice | read/write/bash |
 | qa-auditor | Independent review **and** run gates/tests/app **and** audit spec↔code drift; runs FIRST in fix/sync and classifies root cause SPEC-vs-CODE | read-only (bash) |
 
-Pattern: **spec-writer** writes the whole spec and carves each phase into independent slices. **agent-builder** fans out one **code-generator** per slice in a single Agent message (max parallelism — disjoint paths, never conflict). **qa-auditor** independently gates each slice and audits drift — it never edits. The **human tests between phases**.
+Pattern: **spec-writer** writes the whole spec and carves each phase into independent slices. **agent-builder** fans out one **code-generator** per slice via parallel `delegate_task` calls (max parallelism — disjoint paths, never conflict). **qa-auditor** independently gates each slice and audits drift — it never edits. The **human tests between phases**.

@@ -35,8 +35,8 @@ Current safe defaults (as of 2026):
 
 | Provider | Default model | Notes |
 |----------|---------------|-------|
-| Anthropic | `claude-sonnet-4-6` | matches `.env.example`; verify against current docs before pinning |
-| OpenRouter | `anthropic/claude-sonnet-4-6` | provider-prefixed; routes to the underlying model |
+| OpenRouter (**primary**) | `anthropic/claude-sonnet-4-6` | the default provider — one key, any model, provider-prefixed names |
+| Anthropic | `claude-sonnet-4-6` | direct API; verify against current docs before pinning |
 | Google Gemini | `gemini-3.1-pro` | default; `gemini-2.5-flash` is the fast/cheap alternative for latency-sensitive nodes. `gemini-2.0-flash`/`gemini-1.5-flash` are unavailable for new users |
 | OpenAI | `gpt-4o-mini` | |
 

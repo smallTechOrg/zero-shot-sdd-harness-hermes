@@ -64,7 +64,7 @@ Read every spec file, search the codebase, compare claims to reality:
 - **Data model** — schema/model fields match exactly; sensitive fields handled as specified.
 - **API/CLI** — method/path/request/response and error cases match.
 - **Architecture** — each component exists and data flows as described.
-- **Doc/skeleton freshness** — every skeleton path a harness doc points generators at (e.g. CLAUDE.md's "## The skeleton in `src/`" block) **resolves on disk**. A doc that names a moved/renamed path (e.g. `src/agent/graph/nodes.py` after the tree flattened to `src/graph/nodes.py`) misdirects every generator → High.
+- **Doc/skeleton freshness** — every skeleton path a harness doc points generators at (e.g. AGENTS.md's "## The skeleton in `src/`" block) **resolves on disk**. A doc that names a moved/renamed path (e.g. `src/agent/graph/nodes.py` after the tree flattened to `src/graph/nodes.py`) misdirects every generator → High.
 - **No dead skeleton leftovers** — the build pruned the boilerplate it replaced: no `tests/integration/test_pipeline.py` using the obsolete `run_agent(str)` / `POST /runs` signature, no unused `transform_text` DB columns/prompts, no scaffold tests that fail on a collection run. Stale skeleton artifacts that break the suite → High.
 
 **Output:** **Status: CLEAN / DIVERGENCES FOUND**; a table `| Spec File | Claim | Code Reality | Severity |` (High = wrong/corrupting → must fix; Medium = disagree but may work → fix recommended; Low = naming/style); a Missing-tests list; an Undocumented-behaviour list. Report CLEAN only when every capability is implemented and matches, no High/Medium divergences, every success criterion has a test.
