@@ -28,7 +28,7 @@ These rules are never optional, never skipped, and must survive context compress
 
 9. **`main` is boilerplate-only — ABSOLUTELY. Nothing a `/zero-shot-build` run produces (application code, generated features, phase output) ever reaches `main`.** App code lives on a feature branch cut from the current HEAD and is PR'd back into *that branch* (`--base $base`), never `main`. If you merge a build and its base is `main`, you violated this rule — `git revert` the merge and push. Only harness/spec/boilerplate improvements reach `main`, via a *separate, explicitly-reviewed* PR — never as a side effect of a build. See `harness/rules/git.md`.
 
-10. **A PR must exist before the first feature-branch commit.** Open it right after the first push, **based on the branch you cut from** (`gh pr create --base "$base" --head feature/<slug>-v0.1`, where `$base` is the HEAD captured before `checkout -b`); every later push updates it. See `harness/rules/git.md`.
+10. **A PR must exist before the first feature-branch commit.** Open it right after the first push, **based on the branch you cut from** (`gh pr create --base "$base" --head feature/<slug>-<YYYYMMDD-HHMM>-v0.1`, where `$base` is the HEAD captured before `checkout -b`); every later push updates it. See `harness/rules/git.md`.
 
 ---
 
@@ -53,7 +53,7 @@ Complete all steps in order before writing any code:
   - If incomplete: tell the user to run `/zero-shot-build`; do not write application code
 - [ ] If spec is complete: read the full spec manifest in `CLAUDE.md`
 - [ ] Run `git status` — working tree must be clean before starting
-- [ ] **Branch from the current HEAD**: `base=$(git rev-parse --abbrev-ref HEAD)` then `git checkout -b feature/<slug>-v0.1` — branch from wherever you are so the build dogfoods THIS harness version; never `git checkout main` first (see `harness/rules/git.md`)
+- [ ] **Branch from the current HEAD**: `base=$(git rev-parse --abbrev-ref HEAD)` then `git checkout -b feature/<slug>-$(date +%Y%m%d-%H%M)-v0.1` (the date-time slug keeps the branch name unique) — branch from wherever you are so the build dogfoods THIS harness version; never `git checkout main` first (see `harness/rules/git.md`)
 - [ ] **Create the project directory** `<agent-slug>/` if it doesn't exist — never write agent code into the boilerplate root
 - [ ] Confirm `.env` exists and contains the required API keys/secrets (requested at intake) — tests and the build run against the real LLM/API using these keys
 - [ ] Confirm which phase you are implementing (see `harness/patterns/phases.md`)

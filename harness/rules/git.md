@@ -8,7 +8,8 @@ All git rules that apply to every Claude Code session in this repo.
 
 - **`main` is boilerplate-only — ABSOLUTELY.** Nothing built by a `/zero-shot-build` run — no application code, no generated feature, no phase output — ever reaches `main`. The default branch is reserved for harness/spec/boilerplate improvements only, and those land via a *separate, explicitly-reviewed* PR, never as a side effect of merging a build. If you merge a feature branch and its `--base` is `main`, you have violated this rule.
 - **The build's PR targets `<base>` (the branch it was cut from), NOT `main`.** Open it with `--base "$base"` so the generated app stays isolated on the feature branch and **dogfood output never lands on `main`**. A build that merges to `main` is a failed build — revert it (see below).
-- **Branch every build from the CURRENT HEAD.** Capture where you are first: `base=$(git rev-parse --abbrev-ref HEAD)` — call it `<base>` — then `git checkout -b feature/<slug>-v0.1` from there. Never `git checkout main` first. A build dogfoods the harness version on the branch you are on (e.g. `v0.4.0`, `v1`); branching from `main` would silently test the wrong (stale) harness.
+- **Branch names carry a date-time slug so they are always unique.** Use `feature/<slug>-$(date +%Y%m%d-%H%M)-v0.1` — the timestamp guarantees no clash with branches from earlier runs, local or remote.
+- **Branch every build from the CURRENT HEAD.** Capture where you are first: `base=$(git rev-parse --abbrev-ref HEAD)` — call it `<base>` — then `git checkout -b feature/<slug>-$(date +%Y%m%d-%H%M)-v0.1` from there. Never `git checkout main` first. A build dogfoods the harness version on the branch you are on (e.g. `v0.4.0`, `v1`); branching from `main` would silently test the wrong (stale) harness.
 - All phase commits go to the feature branch, never to `main`.
 - If you find yourself on `main` while writing application code, stop immediately, create the feature branch, and continue there.
 - **Accidental merge to `main`? Revert, don't panic.** If app code reaches `main`, fix it with `git revert <sha>` (never force-push/rewrite shared history) and push. The feature-branch copy remains the canonical source. Document the revert in the PR.
@@ -34,9 +35,10 @@ After creating the feature branch and pushing the first commit, immediately open
 
 ```bash
 base=$(git rev-parse --abbrev-ref HEAD)   # BEFORE checkout -b — this is <base>
-git checkout -b feature/<slug>-v0.1
+branch="feature/<slug>-$(date +%Y%m%d-%H%M)-v0.1"   # date-time slug keeps it unique
+git checkout -b "$branch"
 # ... first commit + push ...
-gh pr create --base "$base" --head feature/<slug>-v0.1
+gh pr create --base "$base" --head "$branch"
 ```
 
 Every subsequent `git push` automatically updates the same PR. Pushing commits without an open PR is equivalent to committing without pushing: the work is invisible and unreviewable.
