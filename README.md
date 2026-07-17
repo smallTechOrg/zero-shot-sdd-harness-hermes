@@ -2,7 +2,7 @@
 
 Give it a one-line idea. Walk away with a working, tested, phased agent.
 
-A lean, Claude-Code-native harness for building agentic software **spec-first**. One person with an idea and one API key can drive a real, production-shaped agent into existence — and a senior engineer opening the result finds a conventional, reviewable stack, not generated mush.
+A lean, Hermes Agent native harness for building agentic software **spec-first**. One person with an idea and one API key can drive a real, production-shaped agent into existence — and a senior engineer opening the result finds a conventional, reviewable stack, not generated mush.
 
 ---
 
