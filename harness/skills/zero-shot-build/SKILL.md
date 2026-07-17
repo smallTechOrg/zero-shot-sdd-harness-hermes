@@ -17,7 +17,10 @@ Intake has **two fixed sections and a variable middle**:
 1. **Product rounds (variable, minimum 5)** — all product questions, progressively deeper. You keep going until you have resolved every dimension that would force a design decision in Phase 1. Five rounds is the floor; complex ideas may need 6, 7, or more. Each round covers a different dimension and must not repeat covered ground.
 2. **Technical round (fixed, always last)** — one round of build-blockers only (LLM provider, stack, access method).
 
-All rounds use `clarify`; the API key prompt is the only additional manual step.
+All rounds use `clarify`; the API key prompt is the only additional manual step. Two resilience rules:
+
+- **If the dynamic question tool doesn't load** (`clarify` can fail to load, e.g. when Hermes runs on a plain command line), ask the questions in plain text **one by one** — ask one, wait for the reply, then ask the next. Never throw all the questions at the user in a single message.
+- **Follow up on ambiguity.** If an earlier question/answer could be read two ways, or the user could not multi-select and their single pick may have dropped options that also apply, ask a short follow-up question to clarify before moving on — never guess.
 
 **How to decide when to stop product rounds:** After each round, ask: *"Is there any dimension — interaction model, state/memory, features, constraints, edge cases, observability, integrations — that, if left unresolved, would force spec-writer to guess?* If yes: write another product round on that dimension. If no: move to the technical round. Err on the side of one more round rather than handing off an ambiguous brief.
 
@@ -125,7 +128,7 @@ Read all prior rounds. Now ask the **technical build questions** — only genuin
 Invoke the **agent-builder** sub-agent once with the brief and the populated `.env`. Tell it to run, in order, and return the **Phase-1 test-handoff**:
 
 - **DESIGN** — spec-writer writes the full spec: vision/capabilities, `spec/architecture.md` (incl. the `## Stack` section), `spec/agent.md` (if a framework is chosen), and the phased plan in `spec/roadmap.md` under "## Phases of Development" (per phase: Goal · independent slices · key surfaces/files · the exact runnable Gate command · how the user tests it).
-- **SCAFFOLD** — branch `feature/<slug>-v0.1`, project dirs, `.env.example`, first commit + push, open the PR.
+- **SCAFFOLD** — branch `feature/<slug>-$(date +%Y%m%d-%H%M)-v0.1` (date-time slug keeps it unique), project dirs, `.env.example`, first commit + push, open the PR.
 - **BUILD PHASE 1** — fan out generators per independent slice in parallel, gate each slice with qa-auditor, then return the Phase-1 test-handoff and STOP.
 
 Relay only the hard blockers it escalates (e.g. a required key still missing from `.env`).
@@ -139,7 +142,7 @@ Phase 1 is the smallest working win: real on the one core path, with clearly-lab
    b. If the phase has migrations: `alembic upgrade head`
    c. `venv/bin/python -m src` with `run_in_background: true`
    d. Health-check with retry: `for i in {1..10}; do curl -sf http://localhost:8001/health && break || sleep 2; done` — wait for the server before presenting the gate. If it never responds → route immediately to qa-auditor (boot failure), do not present the URL.
-2. Load the question tool: `clarify` with query `select:clarify` (before asking).
+2. Load the question tool: `clarify` with query `select:clarify` (before asking). If it doesn't load, ask the gate questions in plain text one by one. If the user couldn't multi-select (or an answer is ambiguous), follow up per feature until you know exactly what worked and what didn't.
 3. Present the handoff as **phase release notes**: the live URL, what was built this phase, what to click / type / look at, the expected result, which parts are clearly-labelled stubs vs real (a stub must never read as a bug), and what the next phase adds. No run commands in the handoff — the app is already serving.
 4. Ask via `clarify` — **ALWAYS MULTI-SELECT, never a single-choice verdict.** One call, tick all that
    apply, covering both load-state and a per-feature checklist derived from THIS phase's success criteria:
