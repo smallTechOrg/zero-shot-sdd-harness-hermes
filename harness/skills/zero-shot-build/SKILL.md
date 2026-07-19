@@ -164,7 +164,13 @@ Instead run a `terminal`/`execute_code` script that loads `.env` itself (`python
 or `source .env` in bash) and prints ONLY a pass/fail signal — presence as a boolean for
 the chosen provider's var (`AGENT_ANTHROPIC_API_KEY`, `AGENT_GEMINI_API_KEY`,
 `AGENT_OPENROUTER_API_KEY`; for **Other**, ask which env var + base URL) — never the value
-itself. Present → **validate it works** in that same script: one minimal real API call
+itself. **Use an ABSOLUTE path to `.env`, never a relative one.** `execute_code` runs the
+script in its own sandboxed process, not the repo's working directory — `dotenv_values(".env")`
+resolves against the sandbox and silently reports MISSING even when the key is genuinely
+present in the repo (confirmed on a live run: the key was present, the relative-path script
+still said MISSING). Resolve the repo root first (e.g. from a known file's path, or have the
+`terminal` tool `pwd`/`git rev-parse --show-toplevel` and pass that in), then
+`dotenv_values(f"{repo_root}/.env")`. Present → **validate it works** in that same script: one minimal real API call
 (e.g. the provider's cheapest endpoint), printing only `OK` or the error type
 (`401`/`429`/`model_not_found`) — a key can be *present but dead* (revoked account, expired
 trial, dead model slug), and discovering that mid-build wastes a phase. Missing, or the test

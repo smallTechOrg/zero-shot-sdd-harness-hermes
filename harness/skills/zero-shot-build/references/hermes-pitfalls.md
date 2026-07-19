@@ -119,6 +119,14 @@ Evidence counts are from `~/.hermes/logs/agent.log*` across Jul 10–20 builds.
   real test call (`OK`/`401`/`429`/`model_not_found`) — never the key value or a raw
   exception that might echo it. Only escalate to the user if presence is false or the test
   call fails, and say exactly why — never "go check the file yourself and report back."
+- **Follow-on bug, also confirmed live:** `execute_code` runs in its own sandboxed process —
+  NOT the repo's working directory. A script that does `dotenv_values(".env")` (relative
+  path) silently reports MISSING even when the key is genuinely present, because it's
+  reading the sandbox's empty `.env`, not the repo's. Always resolve the repo root first
+  (`pwd` / `git rev-parse --show-toplevel` via `terminal`, or a known file's absolute path)
+  and pass an ABSOLUTE path: `dotenv_values(f"{repo_root}/.env")`. A "MISSING" result from a
+  relative-path script is a false negative, not a real missing key — don't tell the user
+  their key is absent without first ruling this out.
 
 ### 17. A reused branch imports a PRIOR build's stack — the worst contamination
 - **Symptom:** live run — the build ran on `feature/up-police-data-analyst-v0.1`, a branch
