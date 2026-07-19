@@ -10,6 +10,8 @@ Phase 1 contains:
 from mssql_analyst.tools.anomaly import anomaly_zscore
 from mssql_analyst.tools.csv_export import to_csv
 from mssql_analyst.tools.mssql import MssqlConnector, get_mssql_connector
+from mssql_analyst.tools.row_cap import shrink_row_cap
+from mssql_analyst.tools.structural_validator import validate_sql_structure
 from mssql_analyst.tools.validator import (
     UnsafeSQLError,
     assert_select_only,
@@ -21,5 +23,7 @@ __all__ = [
     "anomaly_zscore",
     "assert_select_only",
     "get_mssql_connector",
+    "shrink_row_cap",
     "to_csv",
+    "validate_sql_structure",
 ]
