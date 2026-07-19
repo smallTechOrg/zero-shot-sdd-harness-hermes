@@ -42,8 +42,10 @@ uv run alembic current              # must show a revision, not blank
 ### 3. Build the frontend (one-time, then re-build only when `frontend/` changes)
 
 ```bash
-cd frontend && NODE_OPTIONS=--no-experimental-webstorage npm ci && NODE_OPTIONS=--no-experimental-webstorage npm run build && cd ..
+cd frontend && npm install && npm run build && cd ..
 ```
+
+The npm scripts are intentionally **bare** (`next build`, no inline `NODE_OPTIONS=`) because Windows `cmd` won't parse inline env-var prefixes; Node ≥25 SSR safety is handled by the runtime pinning the dependency matrix enforces (Next 15.5.4 is built on Node 22/24). If you must use Node ≥25, run with `NODE_OPTIONS=--no-experimental-webstorage npx next build` instead.
 
 ### 4. Run the server
 

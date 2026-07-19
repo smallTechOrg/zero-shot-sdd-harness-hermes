@@ -4,9 +4,9 @@
   "private": true,
   "description": "Next.js 15 + Tailwind v4 single-page UI for the MSSQL analyst",
   "scripts": {
-    "dev": "NODE_OPTIONS=--no-experimental-webstorage next dev",
-    "build": "NODE_OPTIONS=--no-experimental-webstorage next build",
-    "start": "NODE_OPTIONS=--no-experimental-webstorage next start"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
   },
   "dependencies": {
     "next": "^15.5.4",
