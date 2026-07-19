@@ -1,218 +1,94 @@
-# Agent
+# Agent Graph
 
-> Required when the project uses an agent framework. Delete this file if your project has no agent framework.
->
-> If your project has no agent framework (e.g., a simple script or single-LLM API call), delete this file.
->
+> Single base ReAct loop. Phase 1 = one shot per question; no retry, no reflection (still real ReAct because the LLM produces the tool call rather than a fixed pipeline).
 
----
+## Pattern
 
-## Agent Architecture Pattern
+- **Tool Use (#5)** + **Reasoning (#17)**. One LLM call generates one SQL; the system validates and executes it; the structured result is returned alongside the SQL.
+- **Guardrails (#18)** — system prompt forbids DDL/DML; regex validator blocks anything else.
+- **Resource-Aware Optimisation (#16)** — `TOP N` push-down; row cap enforced server-side.
 
-<!-- FILL IN: Which pattern does this agent follow? Choose one and describe why. -->
+The graph is wired in Phase 1 even though most "smart" behaviours are deferred; this is so that Phase 2/3 can extend it (retry, reflection) without reshaping it.
 
-| Pattern | Use when |
-|---------|----------|
-| **Single-agent loop** | One LLM drives a deterministic tool-call loop. No branches, no handoffs. |
-| **Graph (LangGraph)** | Multi-step pipeline with conditional edges, checkpointing, or parallel nodes. |
-| **Multi-agent** | Specialised sub-agents with distinct roles; orchestrator routes between them. |
-| **Supervisor** | One supervisor LLM dispatches to worker agents based on task type. |
-| **Human-in-the-loop** | Execution pauses at defined checkpoints for user review or approval. |
-
-**Chosen:** <!-- state pattern + one-sentence rationale -->
-
----
-
-## LLM Provider & Model
-
-<!-- FILL IN: Which model drives each agent/node? State provider, model ID, and why. -->
-
-| Agent / Node | Provider | Model ID | Rationale |
-|-------------|----------|----------|-----------|
-| <!-- node --> | Anthropic | <!-- e.g. claude-sonnet-4-6 --> | <!-- latency vs. quality trade-off --> |
-
-**Fallback behaviour:** <!-- Production resilience only: retry/backoff, degraded mode, or a surfaced error if the LLM API is unavailable or rate-limited. NOT a test/offline stub path — tests call the real API with keys from `.env`. -->
-
-**Prompt strategy:** <!-- System/user split, few-shot examples, structured output (tool_use / JSON mode)? -->
-
----
-
-## Tools & Tool Calling
-
-<!-- FILL IN: Every tool the agent can call. -->
-
-| Tool name | Description | Inputs | Output | Side-effects |
-|-----------|-------------|--------|--------|--------------|
-| <!-- name --> | <!-- what it does --> | <!-- params --> | <!-- return type --> | <!-- DB write, API call, file write, etc. --> |
-
-**Tool selection strategy:** <!-- How does the agent decide which tool to call? (LLM choice, rule-based routing, forced single tool) -->
-
-**Tool failure handling:** <!-- retry, fallback, abort — per tool or global policy? -->
-
----
-
-## Agent State
-
-<!-- FILL IN: The full state type. Every field must be named, typed, and annotated with what populates it. -->
+## State
 
 ```python
-class AgentState(TypedDict):
-    # Identity
-    run_id: int                          # set at initialisation
-
-    # Input
-    # ...                                # fields populated from the trigger
-
-    # Pipeline data (populated progressively by nodes)
-    # ...
-
-    # Output
-    # ...                                # final result fields
-
-    # Control
-    error: str | None                    # set by any node on fatal failure
-    checkpoint: str | None              # last completed node (for resume)
+class AgentState(TypedDict, total=False):
+    # inputs
+    request_id: str
+    question: str
+    # nl_to_sql outputs
+    sql: str | None
+    validation_error: str | None
+    # execute_sql outputs
+    columns: list[str]
+    rows: list[tuple]
+    row_count: int
+    tokens_used: int
+    # terminal
+    status: str            # "completed" | "failed"
+    error: str | None
+    latency_ms: int
 ```
 
----
+Every field is optional — only nodes that set a key contribute to it.
 
-## Nodes / Steps
+## Nodes
 
-<!-- FILL IN: One section per node. For single-agent loops, describe each "step" or "tool call phase." -->
+| Node | Inputs | Outputs | Notes |
+|------|--------|---------|-------|
+| `nl_to_sql` | `question`, `schema (cached)` | `sql` or `error` | Calls `LLMClient.complete_json`. Validates with `assert_select_only` (regex). |
+| `execute_sql` | `sql`, `row_cap`, `timeout` | `columns`, `rows`, `row_count`, `tokens_used` (sets 0 for Phase 1 — Gemini token count is optional) | Runs in pyodbc context manager. |
+| `handle_error` | `state.error` | `{status: "failed"}` | Terminal. Surfaces `error` to API. |
+| `finalize` | `state.status` | `{status: "completed" if no error else "failed"}` | Terminal. |
 
-### `node_[name]`
+## Edges
 
-**Reads from state:** <!-- field names -->
-
-**Writes to state:** <!-- field names -->
-
-**LLM call:** <!-- yes/no; if yes: prompt template summary, model used, output format -->
-
-**External calls:**
-
-| System | Operation | On Failure |
-|--------|-----------|------------|
-| <!-- system --> | <!-- what it calls --> | <!-- fatal (set error) / partial (log + continue) / retry --> |
-
-**Behaviour:** <!-- One paragraph. What decision or transformation does this node perform? -->
-
----
-
-## Graph / Flow Topology
-
-<!-- FILL IN: ASCII diagram of node flow. Show ALL conditional edges explicitly. -->
+- `nl_to_sql` → if `sql` empty OR `error` set → `handle_error`; else `execute_sql`.
+- `execute_sql` → if `error` set → `handle_error`; else `finalize`.
+- `handle_error`/`finalize` → `END`.
 
 ```
-START
-  │
-  ▼
-node_a ──(error)──► node_handle_error ──► END
-  │
-  ▼
-node_b ──(condition)──► node_c
-  │                         │
-  │                         ▼
-  └──────────────────► node_finalize
-                             │
-                             ▼
-                            END
+[nl_to_sql] ──(no sql / error)──▶ [handle_error] ─▶ END
+       │
+       └──(sql ok)──▶ [execute_sql] ──▶ [finalize] ─▶ END
+                │
+                └──(error)──▶ [handle_error] ─▶ END
 ```
 
-**Conditional edges:**
+## Error handling
 
-| Source node | Condition | Target |
-|-------------|-----------|--------|
-| <!-- node --> | <!-- e.g. state["error"] is not None --> | <!-- target node --> |
+- Every node catches `Exception` and returns `{"error": <public message>, "status": "failed"}` instead of raising into the graph. The graph only routes on `error` keys.
+- Executor wraps `pyodbc.OperationalError` / `pyodbc.ProgrammingError` and returns them as `error` keys, never raises.
 
----
+## Concurrency
 
-## Memory & Context
+Single request per graph invocation. No fan-out, no background tasks in Phase 1. Concurrent users would require a process model upgrade (Phase 3+).
 
-<!-- FILL IN: How does the agent remember things across turns, steps, or runs? -->
-
-| Scope | Mechanism | What is stored |
-|-------|-----------|----------------|
-| **Within a run** | LangGraph state | All in-progress data |
-| **Across runs** | <!-- DB / vector store / none --> | <!-- e.g. past results, user prefs --> |
-| **Conversation** | <!-- message history / summary / none --> | <!-- if chat-style --> |
-
-**Context window management:** <!-- How is the prompt kept within limits? (summary, sliding window, RAG retrieval) -->
-
----
-
-## Human-in-the-Loop Checkpoints
-
-<!-- FILL IN: Where does execution pause for human input? Delete section if not applicable. -->
-
-| Checkpoint | What is shown to the user | Expected user action | Timeout / default |
-|------------|--------------------------|----------------------|-------------------|
-| <!-- name --> | <!-- what the agent surfaces --> | <!-- approve / edit / abort --> | <!-- timeout action --> |
-
----
-
-## Error Handling & Recovery
-
-<!-- FILL IN: How the agent handles failures at each level. -->
-
-**Node-level:** <!-- Each node catches its own exceptions; fatal errors set state["error"] and route to handle_error node. -->
-
-**Graph-level (handle_error node):**
-- Reads: `state.error`, `state.run_id`
-- Updates DB: run status → "failed", `error_message`, `completed_at`
-- Logs error with `run_id` context
-- Terminates graph
-
-**Resume / retry strategy:** <!-- Can a failed run be resumed from its last checkpoint? How? -->
-
-**Partial failure:** <!-- If a non-critical step fails, does the agent degrade gracefully or abort? -->
-
----
-
-## Observability
-
-<!-- FILL IN: What is logged, traced, and measured? -->
-
-| Signal | What | Where |
-|--------|------|-------|
-| **Trace** | One trace per run, one span per node | <!-- OpenTelemetry / LangSmith / stdout --> |
-| **LLM calls** | Prompt tokens, completion tokens, latency, model | <!-- LangSmith / structured log --> |
-| **Tool calls** | Tool name, inputs, success/error, latency | Structured log |
-| **Run outcome** | Status, total duration, error if any | DB + structured log |
-
----
-
-## Concurrency Model
-
-<!-- FILL IN: How concurrent agent runs are handled. -->
-
-- **Run isolation:** <!-- one-at-a-time (API returns 409) / queue / parallel with run_id scoping -->
-- **Parallel nodes within a run:** <!-- which nodes run in parallel and why -->
-- **Checkpointing:** <!-- none / SqliteSaver / PostgresSaver — required if human-in-the-loop or long-running -->
-
----
-
-## Graph Assembly (`agent/graph.py`)
-
-<!-- FILL IN: Pseudocode showing how nodes and edges are wired. Must be ≤ 60 lines in the real file. -->
+## Graph assembly (pseudocode)
 
 ```python
-graph = StateGraph(AgentState)
-
-graph.add_node("node_a", node_a)
-graph.add_node("node_b", node_b)
-graph.add_node("finalize", node_finalize)
-graph.add_node("handle_error", node_handle_error)
-
-graph.set_entry_point("node_a")
-
-graph.add_conditional_edges(
-    "node_a",
-    lambda s: "handle_error" if s.get("error") else "node_b",
-)
-
-graph.add_edge("node_b", "finalize")
-graph.add_edge("finalize", END)
-graph.add_edge("handle_error", END)
-
-compiled_graph = graph.compile()
+g = StateGraph(AgentState)
+g.add_node("nl_to_sql", partial(nl_to_sql, llm=llm, schema_provider=mssql_schema))
+g.add_node("execute_sql", partial(execute_sql, executor=mssql_executor, row_cap=1000, timeout=15))
+g.add_node("handle_error", lambda s: {"status": "failed", "error": s.get("error")})
+g.add_node("finalize",    lambda s: {"status": s.get("status") or "completed"})
+g.set_entry_point("nl_to_sql")
+g.add_conditional_edges("nl_to_sql", after_nl_to_sql, {"execute_sql": "execute_sql", "handle_error": "handle_error"})
+g.add_edge("execute_sql", "finalize")
+g.add_edge("handle_error", END)
+g.add_edge("finalize", END)
+return g.compile()
 ```
+
+## Dependencies (bound at request time)
+
+- `llm` — `LLMClient` wrapping `GeminiProvider`.
+- `mssql_schema` — `Callable[[], dict[table, list[col]]]` returned from `mssql.connector.MssqlConnector.describe_schema()`; **cached at startup, NOT per-request**.
+- `mssql_executor` — `Callable[[str], tuple[cols, rows, count]]` returned from `mssql.connector.MssqlConnector.execute(sql)`.
+
+## Phase 2/3 hooks
+
+- Retry on validator rejection → add `validate_sql` node + a cycle edge `validate_sql → nl_to_sql (with attempts cap)` — wired in Phase 3.
+- Token-aware row cap → `execute_sql` reads `tokens_used` to adjust — wired in Phase 4.
+- Multi-turn memory → new `recall_history` node reads from `answer_runs` — wired in Phase 2.

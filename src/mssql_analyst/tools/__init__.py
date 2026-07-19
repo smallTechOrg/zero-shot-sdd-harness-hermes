@@ -1,0 +1,21 @@
+"""Tools — pure functions / classes the graph nodes call.
+
+Phase 1 contains:
+- ``validator.assert_select_only`` — read-only enforcement at the SQL layer.
+- ``mssql.MssqlConnector`` — ``pyodbc``-backed live MSSQL connector with
+  schema caching. One connection per call (the connector does NOT pool
+  internally; pooling is the responsibility of an upstream gateway).
+"""
+
+from mssql_analyst.tools.mssql import MssqlConnector, get_mssql_connector
+from mssql_analyst.tools.validator import (
+    UnsafeSQLError,
+    assert_select_only,
+)
+
+__all__ = [
+    "MssqlConnector",
+    "UnsafeSQLError",
+    "assert_select_only",
+    "get_mssql_connector",
+]

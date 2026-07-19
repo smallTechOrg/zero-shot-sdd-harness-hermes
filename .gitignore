@@ -10,12 +10,12 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
-.venv/
 
 # Node / frontend
 node_modules/
 .next/
 dist/
+out/
 build/
 
 # DB
