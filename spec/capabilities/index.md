@@ -1,38 +1,17 @@
-# Capabilities Index
+# Capability Index
 
-> **Boilerplate status:** The spec-writer sub-agent creates one file per capability in this directory. Each file describes exactly one discrete thing the agent can do.
+Phase 1 capabilities:
 
----
+1. **Translate NL Question → SQL** — see `nl_to_sql.md`.
+2. **Execute bounded SELECT on MSSQL** — see `execute_bounded_query.md`.
+3. **Audit-Write Each Question** — see `audit_write.md`.
 
-## What Is a Capability?
+Phase 2/3 capabilities (stubs in Phase 1):
 
-A capability is a single, discrete action or behavior the agent performs. Examples:
-- "Search the web for companies matching criteria X"
-- "Draft a personalized email given a lead profile"
-- "Send a Slack notification when a threshold is crossed"
-
-## Capabilities in This Project
-
-<!-- FILL IN: List capabilities here as they are defined. Each entry links to its spec file (no number prefix). -->
-
-| Capability | File |
-|-----------|------|
-| <!-- name --> | [name.md](name.md) |
-
-## How to Add a New Capability
-
-Run `/zero-shot-build [description]` on the existing spec. The spec-writer sub-agent will:
-1. Create a new file in this directory (`<name>.md`, no number prefix)
-2. Update this index
-3. Flag any dependencies on existing capabilities
-4. Self-review that it fits the architecture and data model before returning
-
-## Capability File Template
-
-Each capability file should answer:
-- **What it does** (one sentence)
-- **Inputs** (what data it receives)
-- **Outputs** (what it produces)
-- **External calls** (APIs, LLMs, databases it touches)
-- **Error cases** (what can go wrong and how it's handled)
-- **Success criteria** (how we test it)
+- **Last-50 sidebar list** — wire `answer_runs` paging into the UI (Phase 2).
+- **Token/cost charts** — render a daily rollup of tokens_used (Phase 2).
+- **CSV export** — let the user download the result table of the most recent question (Phase 2).
+- **Anomaly highlighting** — flag rows that deviate from the median by > 2 sigma (Phase 2).
+- **NL→SQL retry on validator rejection** — one retry into `nl_to_sql` with the validator's complaint in the prompt context (Phase 3).
+- **Multi-turn session memory** — previously-asked question/answer feed into the prompt (Phase 3).
+- **Multi-DB connection picker** — switch between registered DBs at runtime (Phase 3).

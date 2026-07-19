@@ -1,0 +1,26 @@
+/* Global CSS for the MSSQL analyst frontend.
+ *
+ * Per `harness/patterns/tech-stack.md` §"Frontend Static-Export & Styling Rule":
+ *   - FIRST two lines must remain `@source "../";` then `@import "tailwindcss";`.
+ *     Anything below is custom. Do not overwrite the first two.
+ */
+@source "../";
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: rgb(17 24 39);
+  background-color: rgb(249 250 251);
+}
+@media (prefers-color-scheme: dark) {
+  html,
+  body {
+    color: rgb(243 244 246);
+    background-color: rgb(17 24 39);
+  }
+}

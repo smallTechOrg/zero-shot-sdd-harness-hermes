@@ -1,176 +1,147 @@
-# Zero Shot SDD Harness for Building Agents
+# MSSQL Analyst
 
-Give it a one-line idea. Walk away with a working, tested, phased agent.
+A read-only, natural-language data analyst over a live Microsoft SQL Server database. Type a plain-English question; the agent translates it to a single bounded `SELECT`, runs it on your local MSSQL (Windows Integrated Auth), and returns a small result table — alongside the SQL it generated and a running token counter.
 
-A lean, Hermes Agent native harness for building agentic software **spec-first**. One person with an idea and one API key can drive a real, production-shaped agent into existence — and a senior engineer opening the result finds a conventional, reviewable stack, not generated mush.
+Single-user, local. Built spec-first from `spec/`. Phase 1 done; Phase 2/3 gated behind stubs in the UI.
 
----
-
-## The Spirit
-
-Six convictions the whole repo is built around:
-
-1. **Spec is the source of truth.** The spec is written before the code, always. When spec and code disagree, the spec wins and the code is fixed (`/zero-shot-sync`). Every AI session reads the same requirements instead of re-deriving them.
-2. **Built for two audiences at once.** A non-coder drives it with a single sentence; a senior engineer inherits a clean FastAPI + LangGraph stack they can read, review, and own. Neither audience is an afterthought.
-3. **Lean harness, not a framework.** `harness/` is engineering *mindfulness* — rules and patterns that keep every session consistent — deliberately Claude-Code-only and kept small. The product runtime stays provider-agnostic; the harness does not.
-4. **Smallest first-time-right win, phase by phase.** Each phase ships the smallest increment a human can actually test, and it must work the *first* time they test it — real on the tested path, with clearly-labelled stubs for everything still to come. No rough edges on the path you're handed.
-5. **A human gates every phase.** The build is autonomous *within* a phase and stops at each boundary for you to test the increment. You stay in control of what "done" means.
-6. **Real LLM/API or it doesn't count.** Gates, tests, and evals run against the real model with keys from `.env`. A stubbed pass is not a pass.
+> **All commands run from the repo root.** The repo root IS the agent project — there is no subdirectory to `cd` into.
 
 ---
 
-## What This Is
+## Quick start (Phase 1)
 
-A starting point for building AI agents spec-first. The repo ships with:
+### 1. Configure `.env`
 
-- A working **baseline agent** in `src/` (FastAPI + LangGraph + SQLite, provider-agnostic LLM — Anthropic or Gemini, `transform_text` as the capability slot) — tests pass out of the box
-- A **spec template** in `spec/` covering roadmap, architecture, capabilities, data model, API, UI, and agent graph
-- Three **zero-shot skills** (`/zero-shot-build`, `/zero-shot-fix`, `/zero-shot-sync`)
-- A four-agent **team** — agent-builder orchestrates (plans, fans out, owns git/PR); spec-writer is the single design authority; code-generator implements one slice per instance (parallelised); qa-auditor reviews and gates
-- Engineering rules and patterns in `harness/` so every Claude Code session is consistent
-- **Human testing gate between phases** — autonomous within a phase, you test each increment before the next starts
+`.env` already exists. Edit it so the MSSQL block looks like (truth to your local setup):
 
----
+```ini
+# Gemini (already populated in your environment)
+AGENT_GEMINI_API_KEY=...
 
-## How to Use This
+# Phase 1 — live MSSQL via Windows Integrated Auth
+AGENT_MSSQL_HOST=localhost
+AGENT_MSSQL_DB=master
+AGENT_MSSQL_DRIVER=ODBC Driver 17 for SQL Server   # Use 17 or 18 if installed
+AGENT_MSSQL_INTEGRATED_AUTH=true
+AGENT_MSSQL_USER=
+AGENT_MSSQL_PASSWORD=
+AGENT_MSSQL_QUERY_TIMEOUT_SEC=15
+AGENT_MSSQL_ROW_CAP=1000
 
-### Step 1 — Clone
+PORT=8001
+```
+
+### 2. Sync deps + create the audit-log DB
 
 ```bash
-git clone https://github.com/smallTechOrg/zero-shot-sdd-harness.git my-agent
-cd my-agent
-```
-
-### Step 2 — Open in Claude Code
-
-```bash
-claude
-```
-
-### Step 3 — Build
-
-```
-/zero-shot-build An agent that monitors my Shopify store for low-inventory products and drafts restock emails to suppliers
-```
-
-One intake round (scope, stack, API keys → fill `.env`), then the agent builds phase by phase and stops at each boundary for you to test.
-
----
-
-## What Happens (Intake → Phase by Phase)
-
-```
-Your idea
-    ↓
-INTAKE — scope, stack, LLM provider, constraints; fill .env with the required API key
-    ↓
-[spec-writer]  → Full spec: architecture + agent-graph + phased plan (self-reviewed)
-    ↓
-[agent-builder] → Feature branch + PR, scaffold
-    ↓
-per phase — all slices concurrently:
-    [code-generator: slice-a]  ──→  [qa-auditor: slice-a]  ─┐
-    [code-generator: slice-b]  ──→  [qa-auditor: slice-b]  ─┤→  commit + push
-    [code-generator: slice-c]  ──→  [qa-auditor: slice-c]  ─┘
-    ↓
-HUMAN TESTING GATE — exact run commands + expected result; you confirm before next phase
-    ↓
-(issue → qa-auditor classifies SPEC-vs-CODE → code-generator fixes → re-gate)
-    ↓
-repeat per phase → SHIP
-```
-
-Phase 1 is the smallest first-time-right win — real on the tested path, with labelled stubs for everything coming later. Each later phase wires one more stub into real functionality.
-
----
-
-## Repo Layout
-
-```
-src/                ← baseline agent (FastAPI + LangGraph + SQLite, Anthropic/Gemini)
-  api/              ← FastAPI routers (create_app, health, runs)
-  config/           ← Pydantic BaseSettings
-  db/               ← SQLAlchemy models + session
-  domain/           ← Pydantic request/response models
-  graph/            ← LangGraph nodes, edges, state, runner  ← CAPABILITY SLOT
-  llm/              ← LLM client + providers/ (anthropic, gemini)
-  prompts/          ← prompt templates (.md)
-  observability/
-frontend/           ← Next.js static export (served by FastAPI at /app)
-tests/
-  unit/             ← passes with no API key
-  integration/      ← requires real key in .env
-spec/               ← your spec: roadmap, architecture, capabilities/, data, api, ui, agent
-harness/
-  rules/            ← ai-agents, git, secret-hygiene
-  patterns/         ← spec-driven, phases, project-layout, tech-stack, code, test-driven, ui-ux, agentic-ai, engineering-practices
-.claude/
-  skills/           ← /zero-shot-build, /zero-shot-fix, /zero-shot-sync
-  agents/           ← agent-builder, spec-writer, code-generator, qa-auditor
-CLAUDE.md
-pyproject.toml
-alembic.ini        ← Alembic migrations (alembic/)
-agent.py            ← verify setup (default); --run to start the server
-.env.example
-```
-
-**Capability slot** — the three files to replace for your agent:
-- `src/graph/nodes.py` — replace `transform_text` with your logic
-- `src/prompts/transform.md` — replace with your system prompt
-- `frontend/src/app/page.tsx` — replace the transform form with your UI
-
-Everything else (graph wiring, API, DB, settings, tests) is already working.
-
----
-
-## Running the Baseline
-
-```bash
-cp .env.example .env
-# edit .env: set exactly ONE provider key —
-#   AGENT_ANTHROPIC_API_KEY=<your key>   or   AGENT_GEMINI_API_KEY=<your key>
-# the provider is auto-detected from whichever key is set
 uv sync
-python agent.py                        # verify tools, .env, deps, tests (default)
-python agent.py --run                  # migrations + frontend build + start server
+uv run alembic upgrade head
+uv run alembic current              # must show a revision, not blank
 ```
 
-Once running:
-
-| URL | What |
-|-----|------|
-| `http://localhost:8001/app/` | **UI** — transform form (the capability slot) |
-| `http://localhost:8001/health` | API health check |
-| `http://localhost:8001/docs` | Interactive API docs (Swagger) |
-
-Tests:
+### 3. Build the frontend (one-time, then re-build only when `frontend/` changes)
 
 ```bash
-uv run pytest tests/unit/ -v          # no key needed
-uv run pytest tests/ -v               # requires real key in .env
+cd frontend && NODE_OPTIONS=--no-experimental-webstorage npm ci && NODE_OPTIONS=--no-experimental-webstorage npm run build && cd ..
+```
+
+### 4. Run the server
+
+```bash
+uv run python -m src
+```
+
+- Open **http://localhost:8001/app/** for the UI.
+- Open **http://localhost:8001/health** for liveness + mode.
+- Open **http://localhost:8001/docs** for OpenAPI / Swagger.
+
+### 5. Try it
+
+Type: *"how many tables are in master?"* and click **Ask**.
+
+You should see:
+- A result table (≥ 1 row).
+- The `SELECT` it ran (via the **Show SQL** toggle).
+- The "tokens used" badge in the header increasing.
+
+Each question writes one row to `data/agent.db` (see `GET /api/usage`).
+
+---
+
+## Endpoints
+
+| Method | Path           | Purpose                                              |
+|--------|----------------|------------------------------------------------------|
+| GET    | `/`            | Banner with service + UI + API URLs                  |
+| GET    | `/health`      | Liveness + `mssql_mode` (live / unconfigured) + model |
+| POST   | `/api/ask`     | One question → `{sql, columns, rows, row_count, latency_ms, tokens_used, status, sql_attempts}` |
+| GET    | `/api/usage`   | Running totals + last-5 questions from the audit log |
+| GET    | `/app/...`     | Static UI (Next.js export)                            |
+| GET    | `/docs`        | Swagger UI                                           |
+
+See **`spec/api.md`** for the full contract + error envelope.
+
+---
+
+## Tests
+
+```bash
+uv run pytest tests/unit/ -v          # no env needed — pure unit
+uv run pytest tests/integration/ -v   # uses stub LLM + stub connector (no live deps)
+uv run pytest tests/ -v               # full suite
+```
+
+The integration tests are wired to a stubbed LLM provider and a stubbed MSSQL connector so they run on any machine without a live MSSQL.
+
+Playwright E2E (planned for the Stage 3 human gate):
+
+```bash
+cd tests/e2e && npm ci && npx playwright install --with-deps chromium && npx playwright test tests/e2e/ --reporter=line
 ```
 
 ---
 
-## Rules AI Agents Follow
+## Architecture (Phase 1)
 
-Full rules in `harness/rules/ai-agents.md`. Summary:
+- **`src/mssql_analyst/`** — the Python package.
+  - `api/` — FastAPI routers (`/health`, `/api/ask`, `/api/usage`, root banner).
+  - `graph/` — LangGraph state machine: `nl_to_sql → execute_sql → finalize | handle_error`.
+  - `llm/` — single-boundary LLM client + Gemini provider.
+  - `tools/` — the MSSQL connector (`pyodbc`, Windows Integrated Auth, cached schema) and the SQL safety validator.
+  - `db/` — SQLite audit log models + session.
+  - `observability/` — structured JSON logging via structlog.
+- **`frontend/`** — Next.js 15 + Tailwind v4 static export, mounted at `/app/`.
+- **`spec/`** — the product spec (single source of truth).
+- **`tests/`** — unit + integration. E2E (Playwright) wired for the gate.
 
-- Read the full spec before writing any code
-- Never skip a phase; commit every logical unit
-- Tests run against the real LLM/API using keys from `.env` — stubbed runs do not count as passing
-- Each phase is tested by the human before the next phase starts
-- The build record is git history + the PR + the per-phase test-handoffs
+Read **`spec/architecture.md`** for the data flow + layer map.
 
 ---
 
-## FAQ
+## What's real in Phase 1
 
-**What if I already have a stack in mind?**
-State it in the idea: `/zero-shot-build [idea] — use Python + FastAPI + PostgreSQL`. Stack choices are binding.
+- Real Gemini (auto-detected).
+- Real MSSQL (Windows Integrated Auth against your `master`) on **every** question.
+- Real audit-log write to `data/agent.db`.
+- Token counter and "Show SQL" toggle on the UI.
+- Two-layer read-only enforcement (system prompt + regex validator).
 
-**What if something breaks?**
-Run `/zero-shot-fix [what's broken]` — qa-auditor classifies the problem (SPEC vs CODE), the right generator fixes it, qa-auditor re-gates.
+## What's a clearly-labelled stub (and why)
 
-**What if spec and code drift?**
-Run `/zero-shot-sync` — qa-auditor classifies each divergence, generators fix, spec wins.
+- **Last-50 sidebar** — placeholder, "History (last 50) — coming in Phase 2".
+- **Charts / CSV export** — disabled and labelled.
+- **Multi-DB switcher / follow-up chat** — disabled and labelled "Phase 3".
+
+Details in **`spec/roadmap.md`** → "Phase 1 — what is REAL on the tested path" and what is a stub.
+
+---
+
+## Out of scope for Phase 1
+
+Writes, DDL, multi-DB, multi-turn session memory, charts, exports, authentication, multi-tenancy, retry-on-validator (Phase 3), multi-user rate limiting.
+
+---
+
+## Status
+
+Phase 1 ready. See `spec/roadmap.md` for phases 2/3/4 plans.
