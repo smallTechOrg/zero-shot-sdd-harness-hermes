@@ -6,12 +6,18 @@ Phase 1 capabilities:
 2. **Execute bounded SELECT on MSSQL** — see `execute_bounded_query.md`.
 3. **Audit-Write Each Question** — see `audit_write.md`.
 
-Phase 2/3 capabilities (stubs in Phase 1):
+Phase 2 capabilities (replacing the Phase-1 stubs):
 
-- **Last-50 sidebar list** — wire `answer_runs` paging into the UI (Phase 2).
-- **Token/cost charts** — render a daily rollup of tokens_used (Phase 2).
-- **CSV export** — let the user download the result table of the most recent question (Phase 2).
-- **Anomaly highlighting** — flag rows that deviate from the median by > 2 sigma (Phase 2).
-- **NL→SQL retry on validator rejection** — one retry into `nl_to_sql` with the validator's complaint in the prompt context (Phase 3).
-- **Multi-turn session memory** — previously-asked question/answer feed into the prompt (Phase 3).
-- **Multi-DB connection picker** — switch between registered DBs at runtime (Phase 3).
+4. **History List** — see `history_list.md` (sidebar list, newest-first + paging).
+5. **Daily Token Rollup** — see `usage_rollup.md` (sparkline + per-day buckets).
+6. **CSV Export** — see `csv_export.md` (download a result table as `.csv`).
+7. **Anomaly Highlighting** — see `anomaly_highlight.md` (z-score flags rows on the result table).
+
+Phase 3/4 capabilities (stubs in Phase 2):
+
+- **Multi-DB switcher** — stays a Phase-3 stub (UI button visible but disabled).
+- **Follow-up chat** — stays a Phase-3 stub.
+- **NL→SQL retry on validator rejection** — Phase 3.
+- **Multi-turn session memory** — Phase 3.
+- **Outlier-robust scoring (median + MAD)** — Phase 3 replacement for z-score.
+- **Bulk export of matching questions** — Phase 4.

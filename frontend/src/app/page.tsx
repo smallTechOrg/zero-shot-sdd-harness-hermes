@@ -6,6 +6,7 @@ type ApiRow = unknown[];
 
 type ApiResponse = {
   data?: {
+    run_id: string;
     sql: string;
     columns: string[];
     rows: ApiRow[];
@@ -18,24 +19,20 @@ type ApiResponse = {
   error?: { code: string; message: string } | null;
 };
 
-type Usage = {
-  total_questions: number;
-  total_tokens: number;
-  total_rows_returned: number;
-  last_questions: Array<{
-    id: string;
-    question: string;
-    sql: string;
-    status: string;
-    row_count: number;
-    tokens_used: number;
-    latency_ms: number;
-    created_at: string;
-  }>;
+type HistoryItem = {
+  id: string;
+  question: string;
+  sql: string;
+  status: string;
+  row_count: number;
+  tokens_used: number;
+  latency_ms: number;
+  created_at: string;
 };
 
+type UsageDay = { day: string; tokens: number; questions: number };
+
 function formatAnswer(payload: NonNullable<ApiResponse["data"]>): string {
-  // Phase 1 deterministic UI message — no markdown required.
   if (payload.status !== "completed") return "—";
   const rows = payload.rows.slice(0, 1);
   const cols = payload.columns.slice(0, 2).join(", ");
@@ -51,26 +48,90 @@ function formatAnswer(payload: NonNullable<ApiResponse["data"]>): string {
   return `${count} rows returned. Columns: ${cols || "(none)"}.`;
 }
 
+function Sparkline({ days }: { days: UsageDay[] }) {
+  if (days.length === 0) {
+    return (
+      <p
+        data-testid="sparkline-empty"
+        className="text-xs text-gray-500"
+      >
+        No activity yet.
+      </p>
+    );
+  }
+  const max = Math.max(1, ...days.map((d) => d.tokens));
+  return (
+    <div
+      data-testid="sparkline"
+      className="flex h-12 items-end gap-px"
+      aria-label="tokens per day"
+    >
+      {days
+        .slice()
+        .reverse()
+        .map((d) => (
+          <div
+            key={d.day}
+            title={`${d.day} — ${d.tokens} tok (${d.questions} q)`}
+            className="flex-1 rounded-sm bg-indigo-400/80 dark:bg-indigo-300/80"
+            style={{ height: `${Math.max(2, (d.tokens / max) * 100)}%` }}
+          />
+        ))}
+    </div>
+  );
+}
+
 export default function Page() {
   const [question, setQuestion] = useState("How many tables are in master?");
   const [busy, setBusy] = useState(false);
   const [response, setResponse] = useState<ApiResponse["data"] | null>(null);
   const [showSql, setShowSql] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [usage, setUsage] = useState<Usage | null>(null);
+  const [usage, setUsage] = useState<{
+    total_questions: number;
+    total_tokens: number;
+    total_rows_returned: number;
+    last_questions: HistoryItem[];
+  } | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [byDay, setByDay] = useState<UsageDay[]>([]);
+  const [flaggedRows, setFlaggedRows] = useState<number[]>([]);
 
-  async function refreshUsage() {
+  async function refreshAll(extra?: { runId?: string }) {
     try {
-      const r = await fetch("/api/usage");
-      const body: { data?: Usage; error?: unknown } = await r.json();
-      if (body.data) setUsage(body.data);
+      // Refresh usage totals + history list + per-day rollup in parallel.
+      const [uRes, hRes, bRes] = await Promise.all([
+        fetch("/api/usage").then((r) => r.json()),
+        fetch("/api/history?limit=50&offset=0").then((r) => r.json()),
+        fetch("/api/usage/by-day?days=14").then((r) => r.json()),
+      ]);
+      if (uRes?.data) setUsage(uRes.data);
+      if (hRes?.data) {
+        setHistory(hRes.data.rows || []);
+        setHistoryTotal(hRes.data.total || 0);
+      }
+      if (bRes?.data) setByDay(bRes.data.days || []);
     } catch {
-      /* Phase 1: ignore — usage is convenience */
+      /* Phase 2: convenience endpoints — ignore * */
+    }
+    if (extra?.runId) {
+      try {
+        const r = await fetch(
+          `/api/ask/${extra.runId}/anomalies?threshold=2.0`,
+        );
+        const body = await r.json();
+        if (body?.data) setFlaggedRows(body.data.flagged_rows || []);
+      } catch {
+        setFlaggedRows([]);
+      }
+    } else {
+      setFlaggedRows([]);
     }
   }
 
   useEffect(() => {
-    refreshUsage();
+    refreshAll();
   }, []);
 
   async function onAsk(e?: React.FormEvent) {
@@ -91,13 +152,22 @@ export default function Page() {
       } else if (body.data) {
         setResponse(body.data);
       }
-      await refreshUsage();
+      // After every Ask, check the resulting run for anomalies.
+      // ``status === "completed"`` runs are scannable; failed runs return 404
+      // from /anomalies which we treat as "no flagged rows".
+      const runIdForAnomalies =
+        body.data && body.data.status === "completed"
+          ? body.data.run_id
+          : undefined;
+      await refreshAll({ runId: runIdForAnomalies });
     } catch (err) {
       setError(`network_error: ${(err as Error).message}`);
     } finally {
       setBusy(false);
     }
   }
+
+  const flaggedSet = new Set(flaggedRows);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -204,21 +274,29 @@ export default function Page() {
                 </tr>
               </thead>
               <tbody>
-                {response.rows.slice(0, 100).map((row, i) => (
-                  <tr
-                    key={i}
-                    className="odd:bg-white even:bg-gray-50 dark:odd:bg-gray-800 dark:even:bg-gray-700"
-                  >
-                    {(row as unknown[]).map((cell, j) => (
-                      <td
-                        key={j}
-                        className="border-b border-gray-100 px-3 py-1.5 dark:border-gray-700"
-                      >
-                        {String(cell ?? "")}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {response.rows.slice(0, 100).map((row, i) => {
+                  const isFlagged = flaggedSet.has(i);
+                  return (
+                    <tr
+                      key={i}
+                      data-testid={isFlagged ? "row-flagged" : "row"}
+                      className={
+                        isFlagged
+                          ? "bg-red-50 even:bg-red-100 dark:bg-red-900/40 dark:even:bg-red-900/60"
+                          : "odd:bg-white even:bg-gray-50 dark:odd:bg-gray-800 dark:even:bg-gray-700"
+                      }
+                    >
+                      {(row as unknown[]).map((cell, j) => (
+                        <td
+                          key={j}
+                          className="border-b border-gray-100 px-3 py-1.5 dark:border-gray-700"
+                        >
+                          {String(cell ?? "")}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             {response.rows.length > 100 && (
@@ -228,6 +306,16 @@ export default function Page() {
             )}
           </div>
 
+          {flaggedRows.length > 0 && (
+            <p
+              data-testid="anomaly-chip"
+              className="mt-2 inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/40 dark:text-red-100"
+            >
+              {flaggedRows.length} anomalous row
+              {flaggedRows.length === 1 ? "" : "s"} highlighted
+            </p>
+          )}
+
           <button
             type="button"
             data-testid="toggle-sql"
@@ -236,6 +324,16 @@ export default function Page() {
           >
             {showSql ? "Hide SQL" : "Show SQL"}
           </button>
+          {response.status === "completed" && (
+            <a
+              data-testid="download-csv"
+              href={`/api/ask/${response.run_id}/csv`}
+              download={`mssql-${response.run_id}.csv`}
+              className="ml-2 mt-4 inline-block rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium dark:border-gray-600"
+            >
+              Download CSV
+            </a>
+          )}
           {showSql && (
             <pre
               data-testid="sql"
@@ -247,32 +345,58 @@ export default function Page() {
         </section>
       )}
 
+      {/* Phase-2: live history + sparkline */}
       <aside
-        data-testid="history-stub"
-        aria-disabled="true"
-        className="mt-8 rounded-md border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400"
+        data-testid="phase2-history"
+        aria-label="phase2-history"
+        className="mt-8 rounded-md border border-gray-200 bg-white p-4 shadow dark:border-gray-700 dark:bg-gray-800"
       >
-        <p className="font-medium">History (last 50) — coming in Phase 2</p>
-        <p className="opacity-75">
-          Past questions and answers will appear here once we wire the audit
-          log into a list.
-        </p>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-sm font-medium">History</h2>
+          <span className="text-xs text-gray-500">
+            {historyTotal} total
+          </span>
+        </div>
+        <div className="mb-3">
+          <p className="mb-1 text-xs uppercase tracking-wide text-gray-500">
+            tokens / day
+          </p>
+          <Sparkline days={byDay} />
+        </div>
+        {history.length === 0 ? (
+          <p
+            data-testid="history-empty"
+            className="text-xs text-gray-500"
+          >
+            No questions yet — ask one above.
+          </p>
+        ) : (
+          <ul
+            data-testid="history-list"
+            className="divide-y divide-gray-100 dark:divide-gray-700"
+          >
+            {history.slice(0, 10).map((h) => (
+              <li
+                key={h.id}
+                data-testid="history-item"
+                className="flex items-baseline justify-between gap-2 py-2 text-xs"
+              >
+                <span className="flex-1 truncate" title={h.question}>
+                  {h.question || "(blank)"}
+                </span>
+                <span className="font-mono text-gray-500">
+                  {h.status === "completed" ? `✓ ${h.row_count} rows` : "—"}
+                </span>
+                <span className="font-mono text-gray-500">
+                  {h.tokens_used} tok
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </aside>
 
-      <aside
-        aria-disabled="true"
-        data-stub="charts"
-        className="mt-3 rounded-md border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400"
-      >
-        <p className="font-medium">Charts — coming in Phase 2</p>
-      </aside>
-      <aside
-        aria-disabled="true"
-        data-stub="export"
-        className="mt-3 rounded-md border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400"
-      >
-        <p className="font-medium">Export CSV — coming in Phase 2</p>
-      </aside>
+      {/* Phase-3 stubs left clearly labelled so the user knows what's pending. */}
       <aside
         aria-disabled="true"
         data-stub="multi-db"

@@ -42,3 +42,10 @@ class AnswerRun(Base):
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
     )
+    # Phase-2 columns (Phase-2 migration `0002_phase2.py`):
+    # JSON dump of the rows returned by the bounded SELECT; used by csv export.
+    result_columns_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # JSON dump of the rows returned by the bounded SELECT; used by csv export.
+    result_rows_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # UTC day (ISO yyyy-mm-dd); precomputed for the daily rollup endpoint.
+    day: Mapped[str] = mapped_column(String, nullable=False, default="1970-01-01")

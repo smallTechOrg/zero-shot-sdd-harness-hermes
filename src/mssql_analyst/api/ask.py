@@ -3,10 +3,16 @@
 Routes through the graph runner; persists an ``AnswerRun`` row in the audit
 log; errors render as the JSON envelope, never raise ``HTTPException``
 directly to a hidden stack trace.
+
+Phase-2: also persists the result columns + result rows (JSON) so the
+``/api/ask/{run_id}/csv`` endpoint can stream the same result without
+re-running the SELECT. Successful runs populate the JSON columns;
+``status=failed`` runs leave them empty.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 
@@ -44,8 +50,14 @@ def post_ask(req: AskRequest) -> dict:
         raise api_error("empty_question", "question must be non-empty")
 
     # Persist a pending row.
+    pending_day = _utc_day_iso()
     with create_db_session() as session:
-        run = AnswerRun(request_id=request_id, question=question, status="pending")
+        run = AnswerRun(
+            request_id=request_id,
+            question=question,
+            status="pending",
+            day=pending_day,
+        )
         session.add(run)
         session.flush()
         run_id = run.id
@@ -65,6 +77,9 @@ def post_ask(req: AskRequest) -> dict:
             rc=0,
             tokens=0,
             err=f"pipeline_error: {exc.__class__.__name__}",
+            columns_json="[]",
+            rows_json="[]",
+            day_iso=pending_day,
         )
         raise api_error(
             "pipeline_error", "graph raised unexpectedly", status_code=500
@@ -76,6 +91,7 @@ def post_ask(req: AskRequest) -> dict:
 
     status = "completed" if not final.get("error") else "failed"
     payload = {
+        "run_id": run_id,
         "sql": final.get("sql") or "",
         "columns": list(final.get("columns") or []),
         "rows": [list(r) for r in (final.get("rows") or [])],
@@ -85,6 +101,11 @@ def post_ask(req: AskRequest) -> dict:
         "tokens_used": int(final.get("tokens_used") or 0),
         "status": status,
     }
+
+    # Phase-2: serialize columns/rows to JSON for persistence (so CSV export
+    # can serve the same data without a fresh MSSQL round-trip).
+    columns_json = json.dumps(payload["columns"], ensure_ascii=False)
+    rows_json = json.dumps(payload["rows"], ensure_ascii=False, default=str)
 
     if status == "failed":
         err_msg = (final.get("error") or "unknown")[:300]
@@ -102,6 +123,9 @@ def post_ask(req: AskRequest) -> dict:
             rc=payload["row_count"],
             tokens=payload["tokens_used"],
             err=err_msg,
+            columns_json="[]",
+            rows_json="[]",
+            day_iso=pending_day,
         )
         raise _error_for_run(err_msg)
 
@@ -113,6 +137,9 @@ def post_ask(req: AskRequest) -> dict:
         rc=payload["row_count"],
         tokens=payload["tokens_used"],
         err=None,
+        columns_json=columns_json,
+        rows_json=rows_json,
+        day_iso=pending_day,
     )
     log.info(
         "answer_completed",
@@ -152,6 +179,9 @@ def _finalize_run(
     rc: int,
     tokens: int,
     err: str | None,
+    columns_json: str = "[]",
+    rows_json: str = "[]",
+    day_iso: str = "1970-01-01",
 ) -> None:
     with create_db_session() as session:
         run = session.get(AnswerRun, run_id)
@@ -163,3 +193,13 @@ def _finalize_run(
         run.row_count = int(rc or 0)
         run.tokens_used = int(tokens or 0)
         run.error_message = err
+        run.result_columns_json = columns_json or "[]"
+        run.result_rows_json = rows_json or "[]"
+        run.day = day_iso or "1970-01-01"
+
+
+def _utc_day_iso() -> str:
+    """UTC day as ISO yyyy-mm-dd (matches what `created_at.date()` would give)."""
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).date().isoformat()

@@ -7,6 +7,8 @@ Phase 1 contains:
   internally; pooling is the responsibility of an upstream gateway).
 """
 
+from mssql_analyst.tools.anomaly import anomaly_zscore
+from mssql_analyst.tools.csv_export import to_csv
 from mssql_analyst.tools.mssql import MssqlConnector, get_mssql_connector
 from mssql_analyst.tools.validator import (
     UnsafeSQLError,
@@ -16,6 +18,8 @@ from mssql_analyst.tools.validator import (
 __all__ = [
     "MssqlConnector",
     "UnsafeSQLError",
+    "anomaly_zscore",
     "assert_select_only",
     "get_mssql_connector",
+    "to_csv",
 ]

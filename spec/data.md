@@ -37,9 +37,12 @@ File path: `data/agent.db` (overridable via `AGENT_DATABASE_URL`). One table for
 | `error_message` | TEXT NULL           | Public error message on `failed`. |
 | `created_at`    | TIMESTAMP NOT NULL  | UTC. |
 | `updated_at`    | TIMESTAMP NOT NULL  | UTC. |
+| `result_columns_json` | TEXT NOT NULL | Phase-2: JSON list of column names (e.g. `["n"]`). Defaults to `[]`. |
+| `result_rows_json`    | TEXT NOT NULL | Phase-2: JSON list-of-lists of row values. Defaults to `[]`. |
+| `day`                | TEXT NOT NULL | Phase-2: UTC day as ISO `yyyy-mm-dd`, populated at insert. Defaults to `1970-01-01`. |
 
 ### Indexes (Phase 1)
-- Primary key only. Phase 2 will add `(created_at DESC)` for the "last 50 questions" sidebar.
+- Primary key only. Phase 2 adds `(created_at DESC)` for the "last 50 questions" sidebar.
 
 ## Lifecycle
 

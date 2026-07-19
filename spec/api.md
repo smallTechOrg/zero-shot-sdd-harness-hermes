@@ -75,7 +75,36 @@ Returns the running per-totals from the audit log.
     "error": null
   }
   ```
-- In Phase 1 the *sidebar* uses this; Phase 2 adds full pagination.
+- Phase 1 returns the same env.
+
+## `GET /api/history?limit=N&offset=M` *(Phase 2)*
+Newest-first list of every past question, both completed and failed.
+- **Query params:** `limit` (1–200, default 50), `offset` (≥0, default 0).
+- **Response 200:**
+  ```json
+  {
+    "data": {"limit": 50, "offset": 0, "total": 17, "rows": [{"id", "question", "sql", "status", "row_count", "tokens_used", "latency_ms", "created_at"}]},
+    "error": null
+  }
+  ```
+
+## `GET /api/usage/by-day?days=14` *(Phase 2)*
+Per-UTC-day aggregate token usage, descending by day.
+- **Query params:** `days` (1–90, default 14).
+- **Response 200:**
+  ```json
+  {"data": {"days": [{"day": "2026-07-19", "tokens": 1450, "questions": 4}, ...]}, "error": null}
+  ```
+
+## `GET /api/ask/{run_id}/csv` *(Phase 2)*
+Streams the saved result of a completed past question as `text/csv` with `Content-Disposition: attachment; filename="mssql-<run_id>.csv"`.
+- **404 codes:** `ask_not_found` (no run with that id), `ask_not_completed` (run is failed).
+
+## `GET /api/ask/{run_id}/anomalies?threshold=2.0` *(Phase 2)*
+- **Response 200:**
+  ```json
+  {"data": {"run_id": "…uuid…", "threshold": 2.0, "flagged_rows": [4, 17], "flagged_count": 2}, "error": null}
+  ```
 
 ## `GET /`
 Root banner; for smoke and human discovery.

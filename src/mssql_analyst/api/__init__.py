@@ -10,10 +10,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # pragma: no cover
     from mssql_analyst.api.ask import router as ask_router  # noqa: F401
     from mssql_analyst.api.health import router as health_router  # noqa: F401
+    from mssql_analyst.api.phase2 import router as phase2_router  # noqa: F401
     from mssql_analyst.api.usage import router as usage_router  # noqa: F401
     from mssql_analyst.api.app_factory import create_app  # noqa: F401
 
-__all__ = ["ask", "health", "usage", "create_app", "app"]
+__all__ = ["ask", "health", "phase2", "usage", "create_app", "app"]
 
 
 def __getattr__(name: str):  # PEP 562 — module-level lazy lookup
@@ -23,6 +24,8 @@ def __getattr__(name: str):  # PEP 562 — module-level lazy lookup
         return importlib.import_module("mssql_analyst.api.ask")
     if name == "health":
         return importlib.import_module("mssql_analyst.api.health")
+    if name == "phase2":
+        return importlib.import_module("mssql_analyst.api.phase2")
     if name == "usage":
         return importlib.import_module("mssql_analyst.api.usage")
     if name == "create_app":

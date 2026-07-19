@@ -16,6 +16,7 @@ class AskRequest(BaseModel):
 class AskResponse(BaseModel):
     """Successful-response data envelope."""
 
+    run_id: str
     sql: str
     columns: list[str]
     rows: list[list[Any]]
