@@ -40,11 +40,13 @@ def create_app() -> FastAPI:
     from mssql_analyst.api import ask as ask_router  # lazy
     from mssql_analyst.api import health as health_router  # lazy
     from mssql_analyst.api import phase2 as phase2_router  # lazy
+    from mssql_analyst.api import phase3 as phase3_router  # lazy
     from mssql_analyst.api import usage as usage_router  # lazy
 
     app.include_router(health_router.router)
     app.include_router(ask_router.router)
     app.include_router(phase2_router.router)
+    app.include_router(phase3_router.router)
     app.include_router(usage_router.router)
 
     # Mount the Next.js static export at /app/ (single-origin rule).

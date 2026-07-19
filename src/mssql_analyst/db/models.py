@@ -47,5 +47,8 @@ class AnswerRun(Base):
     result_columns_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     # JSON dump of the rows returned by the bounded SELECT; used by csv export.
     result_rows_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
-    # UTC day (ISO yyyy-mm-dd); precomputed for the daily rollup endpoint.
+    # UTC day (ISO yyyy-mm-dd); precomputed for the daily rollup query.
     day: Mapped[str] = mapped_column(String, nullable=False, default="1970-01-01")
+    # Phase-3 column (migration `0003_phase3.py`):
+    # JSON dump of the per-node timing list [{node, started_ms, duration_ms}, ...].
+    timeline_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")

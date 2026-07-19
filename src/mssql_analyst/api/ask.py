@@ -99,8 +99,13 @@ def post_ask(req: AskRequest) -> dict:
         "sql_attempts": int(final.get("sql_attempts") or 0),
         "latency_ms": int(final.get("latency_ms") or 0),
         "tokens_used": int(final.get("tokens_used") or 0),
+        "row_cap_effective": int(final.get("row_cap_effective") or 0),
         "status": status,
     }
+
+    # Phase-3 payload fields surfaced to the user.
+    timeline = list(final.get("timelines") or [])
+    timeline_json = json.dumps(timeline, ensure_ascii=False)
 
     # Phase-2: serialize columns/rows to JSON for persistence (so CSV export
     # can serve the same data without a fresh MSSQL round-trip).
@@ -126,6 +131,7 @@ def post_ask(req: AskRequest) -> dict:
             columns_json="[]",
             rows_json="[]",
             day_iso=pending_day,
+            timeline_json=timeline_json,
         )
         raise _error_for_run(err_msg)
 
@@ -140,6 +146,7 @@ def post_ask(req: AskRequest) -> dict:
         columns_json=columns_json,
         rows_json=rows_json,
         day_iso=pending_day,
+        timeline_json=timeline_json,
     )
     log.info(
         "answer_completed",
@@ -182,6 +189,7 @@ def _finalize_run(
     columns_json: str = "[]",
     rows_json: str = "[]",
     day_iso: str = "1970-01-01",
+    timeline_json: str = "[]",
 ) -> None:
     with create_db_session() as session:
         run = session.get(AnswerRun, run_id)
@@ -196,6 +204,12 @@ def _finalize_run(
         run.result_columns_json = columns_json or "[]"
         run.result_rows_json = rows_json or "[]"
         run.day = day_iso or "1970-01-01"
+        # Phase-3: persist the per-node timing list as JSON.
+        run.timeline_json = timeline_json or "[]"
+        # Phase-3: round-trip the latest effective row cap from the runner
+        # via run.sql_attempts / run.row_cap_effective — Phase-3 surfaces
+        # this via /api/runs/{run_id}/timeline.status metadata; here we
+        # only persist what was provided.
 
 
 def _utc_day_iso() -> str:
