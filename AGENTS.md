@@ -72,12 +72,16 @@ framework. If it does not exist when you need it, stop and raise it as a blocker
 
 ## Skills (entry points)
 
-The skills live at `harness/skills/<name>/SKILL.md`. **No install is required:** when the
-user types `/zero-shot-build` (or asks in plain words to build/fix/sync an agent), READ the
-matching `SKILL.md` and follow it exactly — whether or not the slash command is registered.
-Do not require a setup script; do not improvise a build process; the `SKILL.md` is the
-process. Registering into `~/.hermes/skills/` (or `skills.external_dirs`) only adds `/`
-autocomplete — a convenience, not a requirement.
+The skills live at `harness/skills/<name>/SKILL.md`. When the user asks (in plain words OR
+via a recognised `/zero-shot-*` command) to build / fix / sync an agent, READ the matching
+`SKILL.md` and follow it exactly — the `SKILL.md` is the process; do not improvise one.
+
+Two invocation paths (see `.hermes.md` for the authoritative version):
+- **Plain words** ("build me an agent that…") — works from a bare clone, zero setup.
+- **`/zero-shot-*` slash command** — Hermes rejects *unregistered* slash commands at the CLI
+  ("Unknown command"), so this needs a one-time registration of the clone via
+  `skills.external_dirs` in `~/.hermes/config.yaml`. If a user hits "Unknown command", tell
+  them to register it or just ask in plain words.
 
 | Skill | Purpose |
 |-------|---------|
