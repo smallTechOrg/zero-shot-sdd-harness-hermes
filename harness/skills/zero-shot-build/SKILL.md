@@ -188,9 +188,17 @@ explicitly. ("Just build it" → narrow MVP, baseline defaults, documented as as
    gate, `spec/agent.md` exists if a framework is chosen. Surface its `Assumed:` flags to
    the user in your next message (don't wait on them).
 2. **SCAFFOLD** — you own git (`harness/rules/git.md`):
+   - **Clean-baseline precheck (do this FIRST).** A fresh build must start from untouched
+     boilerplate: confirm `spec/` still has `<!-- FILL IN -->` markers AND no app/agent
+     output dir already exists. If either is already populated, you are on a PRIOR build's
+     branch — STOP and confirm with the user before continuing. (A live run inherited an old
+     ASP.NET+MSSQL data-analyst spec this way and tried `dotnet`/Docker on a Python box.)
    - `base=$(git rev-parse --abbrev-ref HEAD)` — capture `<base>` BEFORE branching; never
      `git checkout main` first (you dogfood the harness version you are on).
-   - `git checkout -b feature/<slug>-$(date +%Y%m%d-%H%M)-v0.1` (date-time slug = unique).
+   - `name="feature/<slug>-$(date +%Y%m%d-%H%M)-v0.1"` — the date-time slug makes it unique.
+     Before creating it, `git ls-remote --heads origin "$name"`; if it somehow exists, bump
+     the timestamp. **Never `git checkout` an existing feature branch to build into** — that
+     imports the prior build's stack. Then `git checkout -b "$name"`.
    - The baseline in `src/` IS the scaffold — generators extend it in place (rename the
      capability slot, never copy beside it). Update `.env.example` for any new env vars.
    - First commit + push, then open the PR immediately: `gh pr create --base "$base"` —
@@ -234,11 +242,18 @@ For the current phase (Phase 1 first; later phases on user approval):
 **The user's ONLY jobs are: (a) put secrets in `.env`, (b) click around the running app.
 They never run a terminal command to test.** You own the server and the gate:
 
-1. **Launch the server yourself**: from the repo root, `.venv/bin/python -m src` with
-   `run_in_background` on a **free port** (retry the next port if busy; export `PORT`).
-   Health-check with retry: `for i in {1..10}; do curl -sf localhost:$PORT/health && break
-   || sleep 2; done`. If it never responds → that's a BLOCKER: route to qa-auditor, fix,
-   relaunch. **Never present a URL you haven't verified live this session.**
+1. **Launch the server yourself**: from the repo root, `.venv/bin/python -m src` using the
+   terminal tool's **background flag** (`background=true` / `run_in_background`) on a **free
+   port** (retry the next port if busy; export `PORT`). **Never a `&`-backgrounded command,
+   `nohup`, `setsid`, or `disown`** — Hermes hard-blocks those and points you to the
+   background flag; the readiness watch fires on the framework's startup line (e.g. uvicorn
+   "Application startup complete"). Then, in a FOLLOW-UP terminal call, health-check with
+   retry: `for i in {1..10}; do curl -sf localhost:$PORT/health && break || sleep 2; done`
+   (each terminal call starts fresh at repo root — use absolute paths, don't rely on a prior
+   `cd`). This curl/httpx smoke asserting response CONTENT is the gate of record; a browser
+   check is a bonus only when the browser tool is actually available. If it never responds →
+   BLOCKER: route to qa-auditor, fix, relaunch. **Never present a URL you haven't verified
+   live this session; never hand the user a command to run the server.**
 2. **Present phase release notes**: the ONE live URL; what was built this phase; what to
    click/type; the expected result; which parts are clearly-labelled stubs vs real (a stub
    must never read as a bug); what the next phase adds. No terminal commands in the handoff.

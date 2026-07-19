@@ -119,3 +119,51 @@ Evidence counts are from `~/.hermes/logs/agent.log*` across Jul 10–20 builds.
   real test call (`OK`/`401`/`429`/`model_not_found`) — never the key value or a raw
   exception that might echo it. Only escalate to the user if presence is false or the test
   call fails, and say exactly why — never "go check the file yourself and report back."
+
+### 17. A reused branch imports a PRIOR build's stack — the worst contamination
+- **Symptom:** live run — the build ran on `feature/up-police-data-analyst-v0.1`, a branch
+  that **already existed on origin** carrying an earlier ASP.NET Core 8 + React + MSSQL
+  data-analyst experiment. The agent followed that OLD spec and tried `dotnet` / MSSQL /
+  Docker on a Python+uv machine: `dotnet: command not found`, `Microsoft.Data.SqlClient.
+  SqlException`, `Unable to find application 'Docker'`. The branch name also had **no
+  date-time slug**, so it collided instead of starting fresh.
+- **Fix (two guards, both in `harness/rules/git.md` + Stage 2 scaffold):**
+  1. **Unique branch, always.** Name every build branch `feature/<slug>-$(date +%Y%m%d-%H%M)-v0.1`
+     and, before `checkout -b`, run `git ls-remote --heads origin "<name>"` — if it exists,
+     the timestamp makes a new one. NEVER `git checkout` an existing feature branch to build
+     into.
+  2. **Clean-baseline precheck.** Before scaffolding, assert the tree is a fresh boilerplate:
+     `spec/` still has `<!-- FILL IN -->` markers AND no app/agent output dir already exists.
+     If either is already populated, that's a prior build — STOP and confirm with the user;
+     never silently continue someone else's build on the wrong stack.
+
+### 18. Long-lived servers: `terminal(background=true)`, never `&` / `nohup` / `setsid`
+- **Symptom:** recurred EVERY build (Jul 18/19/20). The agent tried a `&`-backgrounded
+  server and Hermes hard-blocked it: *"Foreground command uses '&' backgrounding. Use
+  terminal(background=true) for long-lived processes, then run health checks and tests in
+  follow-up terminal calls."* (also blocks `nohup`/`disown`/`setsid`). It then gave up and
+  handed the USER run-commands instead of a URL — the user had to type "start the server
+  yourself."
+- **Fix:** launch the server with the terminal tool's **background flag** (`background=true`
+  / `run_in_background`), let Hermes watch for the framework's readiness line (e.g. uvicorn
+  "Application startup complete"), health-check in a FOLLOW-UP terminal call, then hand ONE
+  live URL. Never `&`/`nohup`/`setsid`; never hand the user a command to run.
+
+### 19. Browser tools are often unavailable — curl/httpx is the smoke-test of record
+- **Symptom:** `_browser_cdp_check` / `_browser_dialog_check` returned False → browser tools
+  absent that turn. A gate that assumes "open it in my own browser, 0 console errors" can't
+  run.
+- **Fix:** the mandatory live smoke is a `curl`/`httpx` hit that asserts response CONTENT
+  (health + each new endpoint + the served UI HTML). Use the browser only if its
+  availability check passes; never block the gate on a browser tool that may not exist.
+
+### 20. Shell cwd does NOT persist between `terminal` calls; and `claude`/other CLIs aren't installed
+- **Symptom:** "Shell cwd was reset to <repo root>" after each call; the agent kept
+  `cd data-analyst` / `cd <repo>` assuming persistence → "No such file or directory" (even
+  double-`cd` from inside the repo). Separately it invoked `claude` (a Claude-Code-ism) →
+  `claude: command not found`.
+- **Fix:** every `terminal` call starts fresh at the repo root — use absolute paths or chain
+  `cd <dir> && <cmd>` in ONE call; never rely on a prior `cd`. Assume only the project's own
+  toolchain exists (`uv`, `.venv/bin/python`); there is no `claude`/`dotnet`/`docker` unless
+  the spec's stack installed it. Commit or stash before any `git checkout` — a dirty tree
+  blocks the switch ("local changes would be overwritten by checkout").
