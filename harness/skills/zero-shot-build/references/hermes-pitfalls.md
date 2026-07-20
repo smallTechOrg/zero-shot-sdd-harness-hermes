@@ -175,36 +175,3 @@ Evidence counts are from `~/.hermes/logs/agent.log*` across Jul 10–20 builds.
   toolchain exists (`uv`, `.venv/bin/python`); there is no `claude`/`dotnet`/`docker` unless
   the spec's stack installed it. Commit or stash before any `git checkout` — a dirty tree
   blocks the switch ("local changes would be overwritten by checkout").
-
-### 21. The SERVING ROUTE matters as much as the model; and models obey gates, not prose
-From a forensic comparison of step-3.7-flash vs hy3 across all Jul-20 builds:
-- **Same model, different route, different build.** `stepfun-ai/step-3.7-flash` (nvidia
-  route): 240 s dead-stream stalls = 43% of agent-active time, ZERO prompt caching (1.87M
-  tokens re-prefilled in 33 min), recurring 429s, ~60 tok/s. The *identical* model as
-  `stepfun/step-3.7-flash` (OpenRouter route): 13/13 clean calls, 83.6% cache hit, ~100
-  tok/s. Before blaming a model, check the provider/base_url in the logs — and prefer the
-  route with prompt caching for long agentic sessions.
-- **Reliability beats latency for unattended builds.** hy3's "magic" was measured as 0 rate
-  limit errors across 2,613 main-loop calls + 83% clean turn completion — that's what
-  survives a 9.5 h overnight build. A faster model that 429s or dead-streams loses more
-  wall-clock than its speed saves.
-- **Prose instructions get skipped; numbered gates get followed.** The same model that
-  ignored a prose paragraph (API-key validation) complied exactly with numbered checklists
-  and reacted immediately to LSP diagnostics. When a step is mandatory, write it as a
-  numbered HARD GATE with an explicit "invalid until X appears in the transcript" clause,
-  and give git/shell sequences as VERBATIM script blocks — models re-derive prose steps
-  badly (one invented `git rev-parse --abbrev-ref HEAD~2` and PR'd against `main`).
-- **Session `model` metadata lies.** Hermes's `sessions.model` records only the LAST model
-  used; mid-session switches mis-attribute entire builds. Attribute work only via per-call
-  `API call #N: model=` log lines.
-- **Locked to a no-cache route (e.g. free-tier-only)? The lever is CONTEXT DIET, not the
-  route.** Live measurement: 11.6M input tokens re-prefilled across 132 calls at ~135k
-  each; all dead-stream stalls hit on large-context requests (60k+/118k). Mitigations, in
-  order: (1) commit+push per slice — never let 35 min of work sit uncommitted on a
-  stall-prone endpoint; (2) once root context exceeds ~60k, delegate slices sequentially
-  into fresh ~20k worker contexts instead of building inline; (3) narrate at slice
-  boundaries so the user never has to ask "are you done?" — every nudge-and-answer costs a
-  full-context re-prefill; (4) know that Hermes's background skill-review runs IN-SESSION
-  on the MAIN model with the full context (observed: its own call counter at 135→150k
-  tokens on the same endpoint, amplifying 429s) — route it to the aux model if the config
-  allows, and account for it when reading rate-limit noise.
