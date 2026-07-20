@@ -11,13 +11,12 @@ A capability is a single, discrete action or behavior the agent performs. Exampl
 - "Draft a personalized email given a lead profile"
 - "Send a Slack notification when a threshold is crossed"
 
-## Capabilities in This Project
-
-<!-- FILL IN: List capabilities here as they are defined. Each entry links to its spec file (no number prefix). -->
+## Capabilities In This Project
 
 | Capability | File |
 |-----------|------|
-| <!-- name --> | [name.md](name.md) |
+| ask_question | [ask_question.md](ask_question.md) |
+| pin_report | [pin_report.md](pin_report.md) |
 
 ## How to Add a New Capability
 
