@@ -197,3 +197,14 @@ From a forensic comparison of step-3.7-flash vs hy3 across all Jul-20 builds:
 - **Session `model` metadata lies.** Hermes's `sessions.model` records only the LAST model
   used; mid-session switches mis-attribute entire builds. Attribute work only via per-call
   `API call #N: model=` log lines.
+- **Locked to a no-cache route (e.g. free-tier-only)? The lever is CONTEXT DIET, not the
+  route.** Live measurement: 11.6M input tokens re-prefilled across 132 calls at ~135k
+  each; all dead-stream stalls hit on large-context requests (60k+/118k). Mitigations, in
+  order: (1) commit+push per slice — never let 35 min of work sit uncommitted on a
+  stall-prone endpoint; (2) once root context exceeds ~60k, delegate slices sequentially
+  into fresh ~20k worker contexts instead of building inline; (3) narrate at slice
+  boundaries so the user never has to ask "are you done?" — every nudge-and-answer costs a
+  full-context re-prefill; (4) know that Hermes's background skill-review runs IN-SESSION
+  on the MAIN model with the full context (observed: its own call counter at 135→150k
+  tokens on the same endpoint, amplifying 429s) — route it to the aux model if the config
+  allows, and account for it when reading rate-limit noise.

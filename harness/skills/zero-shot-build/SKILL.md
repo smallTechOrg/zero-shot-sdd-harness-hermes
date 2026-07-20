@@ -270,19 +270,33 @@ For the current phase (Phase 1 first; later phases on user approval):
 2. Write that slice's **TESTS first**.
 3. Implement the slice.
 4. Run the slice gate (`py_compile` + `pytest --collect-only` minimum; the real gate if
-   logic changed). Fix until green, THEN take the next slice.
+   logic changed). Fix until green.
+5. **Commit + push the slice** (`git commit -m "phase-N: <slice>" && git push`) and post a
+   **one-line progress note** to the user: `Slice 2/5 done — <what>, gate green; next:
+   <what>`. THEN take the next slice.
 
 Never announce "writing all backend surfaces, prompts, and frontend in one pass" — a live
 run did exactly that and shipped 11 type errors on its first write with zero test files.
+Steps 5's two lines are cheap and load-bearing: a live run sat 35+ minutes with 19 dirty
+files and zero commits on a stall-prone endpoint (one crash from losing it all), and its
+silence drew four "are you done?" nudges from the user — each costing a full-context
+re-prefill to answer. Narrate at slice boundaries and nobody has to ask.
 
 Details per step:
 
 1. **Read the phase's slices** from `spec/roadmap.md`.
 2. **Implement each slice** via the **code-generator** role — delegate independent slices in
    parallel (up to 3) when `delegate_task` works AND the LLM key is a paid/dedicated one;
-   otherwise inline, sequentially, one slice at a time. **On a shared/free key, prefer
-   sequential inline** — parallel fan-out multiplies 429s on one credential pool and stalls
-   the build (mining the prior runs showed ~14h cumulative blocked on pool exhaustion).
+   otherwise sequentially, one slice at a time. **Parallel fan-out on a shared/free key is
+   always forbidden** — it multiplies 429s on one credential pool and stalls the build
+   (mining the prior runs showed ~14h cumulative blocked on pool exhaustion). Sequential
+   mode has two sub-modes — pick by CONTEXT SIZE, not by habit:
+   - **Root context lean (< ~60k tokens)** → work inline; delegation overhead isn't worth it.
+   - **Root context heavy (> ~60k) on a NO-CACHE route** → delegate slices **sequentially**
+     (one worker at a time). Every inline call re-prefills the whole root conversation
+     (a live run re-sent 11.6M input tokens across 132 calls at ~135k each); a worker runs
+     the slice in a fresh ~20k context — ~7× cheaper per call, faster, and below the
+     large-context stall zone (live dead-streams occurred at 60k+ and 118k ctx).
    Verify each handback's CONTENT, not just its status — a worker can return
    `status=completed` whose body is a rate-limit error; that slice is NOT done. Each slice = its surfaces + its tests, test-first. Tell each generator exactly
    which files it owns; slices own disjoint paths.
