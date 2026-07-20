@@ -200,29 +200,21 @@ spec-writer fill every capability file without a single guess.
    call succeeded). Anything else → escalate to the user with the exact reason and re-run
    after they fix `.env`.
 3. **Stage 2 is INVALID until this session's transcript contains the script's `OK` output.**
-   A live run skipped this check (it was prose, not a gate) and built an entire phase on an
-   unvalidated key. Do not be that run.
 
-**`.env` is a secret-bearing file — Hermes's
-`read_file` tool hard-blocks it outright ("Access denied: ... secret-bearing environment
-file"). Never call `read_file` on `.env` — a live run hit this and, instead of working
-around it, asked the user to manually open the file and confirm, 10 minutes into intake.**
-Instead run a `terminal`/`execute_code` script that loads `.env` itself (`python-dotenv`,
-or `source .env` in bash) and prints ONLY a pass/fail signal — presence as a boolean for
-the chosen provider's var (`AGENT_ANTHROPIC_API_KEY`, `AGENT_GEMINI_API_KEY`,
-`AGENT_OPENROUTER_API_KEY`; for **Other**, ask which env var + base URL) — never the value
-itself. **Use an ABSOLUTE path to `.env`, never a relative one.** `execute_code` runs the
-script in its own sandboxed process, not the repo's working directory — `dotenv_values(".env")`
-resolves against the sandbox and silently reports MISSING even when the key is genuinely
-present in the repo (confirmed on a live run: the key was present, the relative-path script
-still said MISSING). Resolve the repo root first (e.g. from a known file's path, or have the
-`terminal` tool `pwd`/`git rev-parse --show-toplevel` and pass that in), then
-`dotenv_values(f"{repo_root}/.env")`. Present → **validate it works** in that same script: one minimal real API call
-(e.g. the provider's cheapest endpoint), printing only `OK` or the error type
-(`401`/`429`/`model_not_found`) — a key can be *present but dead* (revoked account, expired
-trial, dead model slug), and discovering that mid-build wastes a phase. Missing, or the test
-call fails → tell the user the specific reason and ask them to fix `.env` (from
-`.env.example`), then re-run the check. Never echo, print, or commit a key value.
+How to check `.env` (it is secret-bearing; `read_file` on it is hard-blocked — never call
+it, and never ask the user to check the file themselves): run a `terminal`/`execute_code`
+script that loads `.env` itself (`python-dotenv`, or `source .env` in bash) and prints ONLY
+a pass/fail signal — presence as a boolean for the chosen provider's var
+(`AGENT_ANTHROPIC_API_KEY`, `AGENT_GEMINI_API_KEY`, `AGENT_OPENROUTER_API_KEY`; for
+**Other**, ask which env var + base URL) — never the value itself. **Use an ABSOLUTE path
+to `.env`** — `execute_code` runs in its own sandbox, so a relative `dotenv_values(".env")`
+reads the wrong directory and falsely reports MISSING. Resolve the repo root first
+(`git rev-parse --show-toplevel` via `terminal`), then `dotenv_values(f"{repo_root}/.env")`.
+Present → **validate it works** in the same script: one minimal real API call, printing
+only `OK` or the error type (`401`/`429`/`model_not_found`) — a key can be present but
+dead. Missing, or the test call fails → tell the user the specific reason and ask them to
+fix `.env` (from `.env.example`), then re-run the check. Never echo, print, or commit a
+key value.
 
 **Synthesis brief**: 2–3 paragraphs covering: what the agent does and who uses it; the
 interaction model (session shape, memory, multi-item); key capabilities (depth, outputs,
@@ -240,16 +232,14 @@ explicitly. ("Just build it" → narrow MVP, baseline defaults, documented as as
    tests it). **Verify on handback**: no `<!-- FILL IN -->` left, every phase has a runnable
    gate, `spec/agent.md` exists if a framework is chosen. Surface its `Assumed:` flags to
    the user in your next message (don't wait on them).
-2. **SCAFFOLD** — you own git. **First read `harness/rules/git.md` (actually read it — a
-   live run skipped it and invented its own git flow).** Then:
+2. **SCAFFOLD** — you own git. **First read `harness/rules/git.md`.** Then:
    - **Clean-baseline precheck (do this FIRST).** A fresh build must start from untouched
      boilerplate: confirm `spec/` still has `<!-- FILL IN -->` markers AND no app/agent
      output dir already exists. If either is already populated, you are on a PRIOR build's
-     branch — STOP and confirm with the user before continuing. (A live run inherited an old
-     ASP.NET+MSSQL data-analyst spec this way and tried `dotnet`/Docker on a Python box.)
-   - **Run this script VERBATIM** (adapt only `<slug>`) — do not re-derive any step. A live
-     run improvised `git rev-parse --abbrev-ref HEAD~2` (meaningless), silently fell back to
-     the forbidden literal `main`, and opened its PR against `main`:
+     branch — its spec and stack are not yours. STOP and confirm with the user before
+     continuing.
+   - **Run this script VERBATIM** (adapt only `<slug>`) — do not re-derive, reorder, or
+     substitute any step:
 
      ```bash
      base=$(git rev-parse --abbrev-ref HEAD)          # BEFORE branching — this is <base>
@@ -273,7 +263,7 @@ explicitly. ("Just build it" → narrow MVP, baseline defaults, documented as as
 3. **PROCEED — no permission stop.** The moment `gh pr create` returns a URL, **IMMEDIATELY
    begin Stage 3 Phase 1 in the same turn.** Do NOT ask the user "shall I proceed?" — the
    SKILL has no gate here; the next human touchpoint is the Stage 4 testing gate after
-   Phase 1 is built and serving. (A live run paused here un-asked and idled 72 minutes.)
+   Phase 1 is built and serving.
 
 ## Stage 3 — Build one phase (the loop)
 
@@ -290,12 +280,9 @@ For the current phase (Phase 1 first; later phases on user approval):
    **one-line progress note** to the user: `Slice 2/5 done — <what>, gate green; next:
    <what>`. THEN take the next slice.
 
-Never announce "writing all backend surfaces, prompts, and frontend in one pass" — a live
-run did exactly that and shipped 11 type errors on its first write with zero test files.
-Steps 5's two lines are cheap and load-bearing: a live run sat 35+ minutes with 19 dirty
-files and zero commits on a stall-prone endpoint (one crash from losing it all), and its
-silence drew four "are you done?" nudges from the user — each costing a full-context
-re-prefill to answer. Narrate at slice boundaries and nobody has to ask.
+Never write all surfaces in one pass — untested bulk writes ship broken. Step 5 is
+load-bearing: committed slices survive any crash, and slice-boundary progress notes mean
+the user never has to interrupt the build to ask "are you done?".
 
 Details per step:
 
@@ -308,10 +295,13 @@ Details per step:
    mode has two sub-modes — pick by CONTEXT SIZE, not by habit:
    - **Root context lean (< ~60k tokens)** → work inline; delegation overhead isn't worth it.
    - **Root context heavy (> ~60k) on a NO-CACHE route** → delegate slices **sequentially**
-     (one worker at a time). Every inline call re-prefills the whole root conversation
-     (a live run re-sent 11.6M input tokens across 132 calls at ~135k each); a worker runs
-     the slice in a fresh ~20k context — ~7× cheaper per call, faster, and below the
-     large-context stall zone (live dead-streams occurred at 60k+ and 118k ctx).
+     (one worker at a time). Every inline call re-prefills the whole root conversation; a
+     worker runs the slice in a fresh small context — several times cheaper per call,
+     faster, and below the context sizes where free-tier streams stall.
+   **Pace by turns, not just tokens:** each assistant turn is one API request, and free
+   tiers rate-limit per minute — so do a slice's related writes (test + implementation
+   files) as PARALLEL tool calls in one turn instead of one file per turn. Fewer, fuller
+   turns get the same work done with fewer 429s.
    Verify each handback's CONTENT, not just its status — a worker can return
    `status=completed` whose body is a rate-limit error; that slice is NOT done. Each slice = its surfaces + its tests, test-first. Tell each generator exactly
    which files it owns; slices own disjoint paths.
