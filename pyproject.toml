@@ -16,6 +16,7 @@ dependencies = [
     "structlog>=24.1",
     "duckdb>=1.0",
     "pyodbc>=5.0",
+    "python-multipart>=0.0.9",
 ]
 
 [dependency-groups]

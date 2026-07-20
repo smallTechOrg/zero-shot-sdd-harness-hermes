@@ -1,7 +1,9 @@
 """CSV upload and run endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from typing import List
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from src.api._common import api_error, ok
@@ -14,19 +16,21 @@ router = APIRouter()
 
 
 @router.post("/sessions")
-def create_session_endpoint(session: Session = Depends(get_session)) -> dict:
-    row = create_session()
-    meta = schema_summary(row.id)
+def create_session_endpoint() -> dict:
+    # Create a session using the service function which returns a SessionRow.
+    data = create_session()
+    # Get the schema summary (should be empty for a new session)
+    meta = schema_summary(data.id)
     return ok({
-        "id": row.id,
-        "status": row.status,
-        "created_at": row.created_at.isoformat(),
+        "id": data.id,
+        "status": data.status,
+        "created_at": data.created_at,
         "schema_summary": meta,
     })
 
 
 @router.get("/sessions/{session_id}")
-def get_session_endpoint(session_id: str, session: Session = Depends(get_session)) -> dict:
+def get_session_endpoint(session_id: str) -> dict:
     row = get_session_row(session_id)
     if row is None:
         raise api_error("not_found", "Session not found", 404)
@@ -34,14 +38,14 @@ def get_session_endpoint(session_id: str, session: Session = Depends(get_session
     return ok({
         "id": row.id,
         "status": row.status,
-        "created_at": row.created_at.isoformat(),
-        "updated_at": row.updated_at.isoformat(),
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
         "schema_summary": meta,
     })
 
 
 @router.post("/sessions/{session_id}/csv")
-async def upload_csv(session_id: str, files: list[UploadFile] = File(...), session: Session = Depends(get_session)) -> dict:
+async def upload_csv(session_id: str, files: List[UploadFile] = File(...)) -> dict:
     row = get_session_row(session_id)
     if row is None:
         raise api_error("not_found", "Session not found", 404)

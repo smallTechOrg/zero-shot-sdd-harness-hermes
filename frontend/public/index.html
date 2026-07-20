@@ -3,39 +3,65 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zero-Shot Agent — Transform</title>
+  <title>CSV Analyst Agent</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
-      <h1>Zero-Shot Agent</h1>
+      <h1>CSV Analyst Agent</h1>
       <span id="provider-badge" class="badge" title="Active LLM provider">…</span>
     </header>
 
-    <!-- CAPABILITY SLOT — replace this form with your agent's UI -->
-    <section class="card" id="transform-card">
-      <h2>Transform text</h2>
-      <p class="hint">The baseline capability: give it text and an instruction; it applies the
-        instruction with one real LLM call.</p>
+    <!-- CAPABILITY SLOT -- replace this form with your agent's UI -->
+    <section class="card" id="analyst-card">
+      <h2>CSV Analyst</h2>
+      <p class="hint">
+        Upload CSV files and ask questions in plain English. The agent will
+        inspect the data, generate a SQL query, and return the answer with a
+        table, charts, and key metrics.
+      </p>
 
-      <label for="instruction">Instruction</label>
-      <input id="instruction" type="text"
-             value="Summarize the text in one short paragraph." />
+      <label for="csv-files">CSV Files</label>
+      <input id="csv-files" type="file" multiple accept=".csv" />
 
-      <label for="text">Text</label>
-      <textarea id="text" rows="8"
-                placeholder="Paste the text to transform…"></textarea>
+      <label for="question">Question</label>
+      <input id="question" type="text"
+             placeholder="e.g., Show me the top 10 police stations by FIR count" />
 
-      <button id="run-btn">Run</button>
+      <button id="run-btn">Analyze</button>
 
       <div id="status" class="status" hidden></div>
       <div id="error" class="error" hidden></div>
 
       <div id="result-wrap" hidden>
-        <h3>Result</h3>
-        <pre id="result"></pre>
-        <p class="meta" id="result-meta"></p>
+        <h3>Plan</h3>
+        <pre id="plan"></pre>
+
+        <h3>Generated SQL</h3>
+        <pre id="generated-code"></pre>
+
+        <h3>Results</h3>
+        <div id="results-container">
+          <table id="result-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <h3>Charts</h3>
+        <div id="charts">
+          <div>Bar Chart: <span id="chart-bar">[placeholder]</span></div>
+          <div>Line Chart: <span id="chart-line">[placeholder]</span></div>
+          <div>Pie Chart: <span id="chart-pie">[placeholder]</span></div>
+        </div>
+
+        <h3>Key Metrics</h3>
+        <div id="kpis">
+          <div>Total Rows: <span id="kpi-rows">0</span></div>
+          <div>Date Range: <span id="kpi-date-range">N/A</span></div>
+          <div>Distinct Categories: <span id="kpi-categories">0</span></div>
+        </div>
       </div>
     </section>
 

@@ -33,8 +33,13 @@ def test_create_run_rejects_empty_text():
 
 def test_run_without_key_fails_gracefully(no_keys):
     """No key → run persists as failed with an actionable message; no 500."""
+    # The CSV Analyst run requires a session_id, so create one first.
     with _client() as client:
-        res = client.post("/runs", json={"text": "hello world"})
+        res = client.post("/sessions")
+        assert res.status_code == 200
+        session_id = res.json()["data"]["id"]
+
+        res = client.post("/runs", json={"session_id": session_id, "question": "hello world"})
         assert res.status_code == 200
         run = res.json()["data"]
         assert run["status"] == "failed"
@@ -50,7 +55,7 @@ def test_frontend_served_at_app():
     with _client() as client:
         res = client.get("/app/")
         assert res.status_code == 200
-        assert "Zero-Shot Agent" in res.text
+        assert "CSV Analyst Agent" in res.text
         # styles + js referenced (single-origin)
         assert "styles.css" in res.text
         assert "app.js" in res.text

@@ -31,12 +31,16 @@ def create_session() -> SessionRow:
         db.add(row)
         db.flush()
         db.refresh(row)
+        db.expunge(row)
         return row
 
 
 def get_session_row(session_id: str) -> SessionRow | None:
     with create_db_session() as db:
-        return db.get(SessionRow, session_id)
+        row = db.get(SessionRow, session_id)
+        if row is not None:
+            db.expunge(row)
+        return row
 
 
 def _ingest_single(conn: Any, table: str, raw: bytes) -> int:
