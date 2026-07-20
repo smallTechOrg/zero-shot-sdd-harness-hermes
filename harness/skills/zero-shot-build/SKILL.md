@@ -234,8 +234,13 @@ For the current phase (Phase 1 first; later phases on user approval):
    implementation) as PARALLEL tool calls in ONE turn; (2) gate + ship in ONE chained
    command: `pytest -q && git add <files> && git commit -m "phase-N: <slice>" && git push`;
    (3) a one-line progress note. Never spend two terminal calls where one `&&` chain works;
-   never write one file per turn. If any tool result mentions a rate limit, prepend
-   `sleep 30 && ` to the next terminal command and batch harder.
+   never write one file per turn.
+   **Pacing floor (free-tier providers) — steady beats fast:** prepend `sleep 15 && ` to
+   EVERY terminal command during build stages. This deliberately holds the loop at a slow,
+   even cadence (~2–4 requests/min) — a long-running build that never provokes the rate
+   limiter outlives a fast one that dies on it. Escalation: if any tool result mentions a
+   rate limit (429/"Too Many Requests"), use `sleep 45 && ` for the next several commands
+   and batch even harder. Only drop the floor when the provider is a paid/dedicated tier.
    Verify each handback's CONTENT, not just its status — a worker can return
    `status=completed` whose body is a rate-limit error; that slice is NOT done. Each slice = its surfaces + its tests, test-first. Tell each generator exactly
    which files it owns; slices own disjoint paths.
