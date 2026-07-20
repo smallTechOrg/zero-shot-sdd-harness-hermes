@@ -1,218 +1,186 @@
-# Agent
+# Agent Graph
 
-> Required when the project uses an agent framework. Delete this file if your project has no agent framework.
->
-> If your project has no agent framework (e.g., a simple script or single-LLM API call), delete this file.
->
+Pattern: **Plan → Query → Execute → Explain** with retry-on-error and a single clarifying-round sub-loop.
 
----
-
-## Agent Architecture Pattern
-
-<!-- FILL IN: Which pattern does this agent follow? Choose one and describe why. -->
-
-| Pattern | Use when |
-|---------|----------|
-| **Single-agent loop** | One LLM drives a deterministic tool-call loop. No branches, no handoffs. |
-| **Graph (LangGraph)** | Multi-step pipeline with conditional edges, checkpointing, or parallel nodes. |
-| **Multi-agent** | Specialised sub-agents with distinct roles; orchestrator routes between them. |
-| **Supervisor** | One supervisor LLM dispatches to worker agents based on task type. |
-| **Human-in-the-loop** | Execution pauses at defined checkpoints for user review or approval. |
-
-**Chosen:** <!-- state pattern + one-sentence rationale -->
+Source: `harness/patterns/agentic-ai.md` — the Plan–Execute–Check pattern, extended with an explicit Clarify step to keep the human in the loop on DB ambiguities without stalling the pipeline.
 
 ---
 
-## LLM Provider & Model
+## Graph Pattern
 
-<!-- FILL IN: Which model drives each agent/node? State provider, model ID, and why. -->
+```
+          ┌─────────────┐
+  start ──│    plan     │─── plan_text
+          └──────┬──────┘
+                 │
+          ┌──────▼──────┐
+          │   query     │─── generated_code, code_language
+          └──────┬──────┘
+                 │
+          ┌──────▼─────────┐
+          │  execute       │─── rows, row_count, latency_ms
+          └──────┬─────────┘
+                 │
+          ┌──────▼──────┐
+          │   explain   │─── nl_answer, chart_spec, kpis, result_hash
+          └──────┬──────┘
+                 │
+               finalize
+              (status=completed)
 
-| Agent / Node | Provider | Model ID | Rationale |
-|-------------|----------|----------|-----------|
-| <!-- node --> | Anthropic | <!-- e.g. claude-sonnet-4-6 --> | <!-- latency vs. quality trade-off --> |
-
-**Fallback behaviour:** <!-- Production resilience only: retry/backoff, degraded mode, or a surfaced error if the LLM API is unavailable or rate-limited. NOT a test/offline stub path — tests call the real API with keys from `.env`. -->
-
-**Prompt strategy:** <!-- System/user split, few-shot examples, structured output (tool_use / JSON mode)? -->
+Any node → on error → handle_error (status=failed) OR handle_clarify (one clarifying prompt, retry once)
+```
 
 ---
 
-## Tools & Tool Calling
+## State
 
-<!-- FILL IN: Every tool the agent can call. -->
+Type: dict keyed by strings (LangGraph `StateGraph` with `add` reducer on list-typed values).
 
-| Tool name | Description | Inputs | Output | Side-effects |
-|-----------|-------------|--------|--------|--------------|
-| <!-- name --> | <!-- what it does --> | <!-- params --> | <!-- return type --> | <!-- DB write, API call, file write, etc. --> |
-
-**Tool selection strategy:** <!-- How does the agent decide which tool to call? (LLM choice, rule-based routing, forced single tool) -->
-
-**Tool failure handling:** <!-- retry, fallback, abort — per tool or global policy? -->
+| Key | Type | Description |
+|-----|------|-------------|
+| `run_id` | str | The run row primary key (set once at graph entry) |
+| `session_id` | str | Session ID for CSV metadata + conversation history caching |
+| `input_text` | str | The user's latest question |
+| `conversation_history` | list[{role: user\|assistant, content: str}] | Prior Q&A in this session; fed to every node as additional context |
+| `instruction` | str | Alias for input_text in the current run |
+| `plan_text` | str \| None | Structured plan from the plan node |
+| `generated_code` | str \| None | SQL or Python from the query node |
+| `code_language` | str \| None | `"sql"` or `"python"` |
+| `rows` | list[dict] \| None | Result rows from the execute node |
+| `row_count` | int \| None | Filled by execute node |
+| `latency_ms` | float \| None | Filled by execute node |
+| `nl_answer` | str \| None | Final natural-language explanation |
+| `chart_spec` | dict \| None | `{type, x, y, title, color_by?}` |
+| `kpis` | list[dict] \| None | `[{label, value, unit?}, ...]` |
+| `result_hash` | str \| None | SHA-256 of row payload bytes |
+| `source` | str \| None | `duckdb` \| `mssql` \| `mssql-cache` |
+| `error` | str \| None | Error message on failure; cleared on retry |
+| `status` | str | `pending` → `running` → `completed` \| `failed` \| `clarifying` |
+| `clarify_prompt` | str \| None | A clarifying question for the user, set by `handle_clarify` |
+| `cache_hit` | bool \| None | True when served from msql-cache |
 
 ---
 
-## Agent State
+## Nodes
 
-<!-- FILL IN: The full state type. Every field must be named, typed, and annotated with what populates it. -->
+### `plan(state) -> partial_state`
+
+Input: `input_text` + `conversation_history` + schema summary for the current session.
+
+Behaviour:
+- Calls LLM with a structured plan prompt (see `src/prompts/plan.md`) that logs all tables, columns, and types known for this session.
+- Outputs a plan_text JSON string listing: tables, columns, filters, aggregations, joins, sort, limit.
+- Never executes any query.
+
+Failure modes → `handle_error` with `error_message` set.
+
+Output: `{plan_text, error, status}`.
+
+---
+
+### `query(state) -> partial_state`
+
+Input: `plan_text` + `conversation_history` + `plan_text`.
+
+Behaviour:
+- Calls LLM with a plan-to-code prompt (see `src/prompts/query.md`).
+- Generates **exactly one** executable target — DuckDB SQL (preferred) or Python+pandas (allowed for non-standard string ops or date functions not supported by DuckDB; the node must explicitly flag `code_language=python` and the execution node must use the runner service's Python runner).
+- Validates the generated SQL syntactically in-process via DuckDB's `.execute()` before returning; on syntax error, retries once with the error appended to the prompt.
+
+Output: `{generated_code, code_language, error, status}`.
+
+---
+
+### `execute(state) -> partial_state`
+
+Input: `generated_code` + `code_language` + `session_id` + `source` flag.
+
+Behaviour:
+- Phase 1: executes on the session's DuckDB via `src/services/query_exec.py` (`execute_on_duckdb`).
+- Phase 2: `execute_on_mssql` first checks DuckDB cache (materialized view per table-set); on hit, returns cache rows with `cache_hit=True`; on miss, opens a `SET TRANSACTION READ ONLY` pyodbc connection, runs the query, writes the result set to the cache file, returns rows with `cache_hit=False`.
+- Captures `row_count`, `latency_ms` (wall-clock per query).
+- Result is JSON-serialized deterministically (sorted keys, null-safe); `result_hash` = `sha256` of the UTF-8 bytes.
+
+Output: `{rows, row_count, latency_ms, result_hash, source, cache_hit, error, status}`.
+
+---
+
+### `explain(state) -> partial_state`
+
+Input: `rows`, `row_count`, `input_text`, `conversation_history`, `plan_text`.
+
+Behaviour:
+- Calls LLM with `src/prompts/explain.md`: summarise rows, select chart spec (bar / line / pie — pick only one unless rows unambiguously support a stacked/grouped structure, in which case a grouped bar is acceptable), compute 3–6 dashboard KPIs from the rows (count, sum, average, date range, distinct values, time-trend direction), and emit a result_hash echo.
+- Always include the raw row_count and latency_ms verbatim in the answer block for audit.
+
+Output: `{nl_answer, chart_spec, kpis, error, status}`.
+
+---
+
+### `finalize(state) -> partial_state`
+
+Merges executor output into RunRow: status=completed, output_text (json blob with nl_answer, chart_spec, kpis, audit_block), provider, model. Zero logic — just a terminal state merge.
+
+Output: `{status: "completed"}`.
+
+---
+
+### `handle_error(state) -> partial_state`
+
+Routes to `status="failed"`. Preserves `error`, `error_message`, `generated_code` (partial if available from the failing node), `plan_text` (if present), and `latency_ms` if execute started. Marks the run failed in DB via `update_run(run_id, status="failed", error_message=...)`.
+
+Output: `{status: "failed"}`.
+
+---
+
+### `handle_clarify(state) -> partial_state`
+
+One-shot sub-loop: emits a user-facing clarifying question (e.g. "Column `PS` not found — did you mean `ps_name` or `police_station`?") and routes the run back to the user without failing. The frontend re-submits the original question prepended with the user's reply; the graph re-enters at `plan` with the full context. Maximum one clarification round per step; beyond that the run fails gracefully.
+
+Output: `{status: "clarifying", clarify_prompt, error: None}`.
+
+---
+
+## Concurrency
+
+Each run is a single in-process LangGraph `invoke`. No parallel execution within a single run. Multiple concurrent runs share the same session's DuckDB but do not share a transaction — DuckDB handles MVCC internally.
+
+---
+
+## Assembly (runner.py pseudocode)
 
 ```python
-class AgentState(TypedDict):
-    # Identity
-    run_id: int                          # set at initialisation
+from langgraph.graph import StateGraph, END
+from src.graph.nodes import plan, query, execute, explain, finalize, handle_error, handle_clarify
 
-    # Input
-    # ...                                # fields populated from the trigger
-
-    # Pipeline data (populated progressively by nodes)
-    # ...
-
-    # Output
-    # ...                                # final result fields
-
-    # Control
-    error: str | None                    # set by any node on fatal failure
-    checkpoint: str | None              # last completed node (for resume)
-```
-
----
-
-## Nodes / Steps
-
-<!-- FILL IN: One section per node. For single-agent loops, describe each "step" or "tool call phase." -->
-
-### `node_[name]`
-
-**Reads from state:** <!-- field names -->
-
-**Writes to state:** <!-- field names -->
-
-**LLM call:** <!-- yes/no; if yes: prompt template summary, model used, output format -->
-
-**External calls:**
-
-| System | Operation | On Failure |
-|--------|-----------|------------|
-| <!-- system --> | <!-- what it calls --> | <!-- fatal (set error) / partial (log + continue) / retry --> |
-
-**Behaviour:** <!-- One paragraph. What decision or transformation does this node perform? -->
-
----
-
-## Graph / Flow Topology
-
-<!-- FILL IN: ASCII diagram of node flow. Show ALL conditional edges explicitly. -->
-
-```
-START
-  │
-  ▼
-node_a ──(error)──► node_handle_error ──► END
-  │
-  ▼
-node_b ──(condition)──► node_c
-  │                         │
-  │                         ▼
-  └──────────────────► node_finalize
-                             │
-                             ▼
-                            END
-```
-
-**Conditional edges:**
-
-| Source node | Condition | Target |
-|-------------|-----------|--------|
-| <!-- node --> | <!-- e.g. state["error"] is not None --> | <!-- target node --> |
-
----
-
-## Memory & Context
-
-<!-- FILL IN: How does the agent remember things across turns, steps, or runs? -->
-
-| Scope | Mechanism | What is stored |
-|-------|-----------|----------------|
-| **Within a run** | LangGraph state | All in-progress data |
-| **Across runs** | <!-- DB / vector store / none --> | <!-- e.g. past results, user prefs --> |
-| **Conversation** | <!-- message history / summary / none --> | <!-- if chat-style --> |
-
-**Context window management:** <!-- How is the prompt kept within limits? (summary, sliding window, RAG retrieval) -->
-
----
-
-## Human-in-the-Loop Checkpoints
-
-<!-- FILL IN: Where does execution pause for human input? Delete section if not applicable. -->
-
-| Checkpoint | What is shown to the user | Expected user action | Timeout / default |
-|------------|--------------------------|----------------------|-------------------|
-| <!-- name --> | <!-- what the agent surfaces --> | <!-- approve / edit / abort --> | <!-- timeout action --> |
-
----
-
-## Error Handling & Recovery
-
-<!-- FILL IN: How the agent handles failures at each level. -->
-
-**Node-level:** <!-- Each node catches its own exceptions; fatal errors set state["error"] and route to handle_error node. -->
-
-**Graph-level (handle_error node):**
-- Reads: `state.error`, `state.run_id`
-- Updates DB: run status → "failed", `error_message`, `completed_at`
-- Logs error with `run_id` context
-- Terminates graph
-
-**Resume / retry strategy:** <!-- Can a failed run be resumed from its last checkpoint? How? -->
-
-**Partial failure:** <!-- If a non-critical step fails, does the agent degrade gracefully or abort? -->
-
----
-
-## Observability
-
-<!-- FILL IN: What is logged, traced, and measured? -->
-
-| Signal | What | Where |
-|--------|------|-------|
-| **Trace** | One trace per run, one span per node | <!-- OpenTelemetry / LangSmith / stdout --> |
-| **LLM calls** | Prompt tokens, completion tokens, latency, model | <!-- LangSmith / structured log --> |
-| **Tool calls** | Tool name, inputs, success/error, latency | Structured log |
-| **Run outcome** | Status, total duration, error if any | DB + structured log |
-
----
-
-## Concurrency Model
-
-<!-- FILL IN: How concurrent agent runs are handled. -->
-
-- **Run isolation:** <!-- one-at-a-time (API returns 409) / queue / parallel with run_id scoping -->
-- **Parallel nodes within a run:** <!-- which nodes run in parallel and why -->
-- **Checkpointing:** <!-- none / SqliteSaver / PostgresSaver — required if human-in-the-loop or long-running -->
-
----
-
-## Graph Assembly (`agent/graph.py`)
-
-<!-- FILL IN: Pseudocode showing how nodes and edges are wired. Must be ≤ 60 lines in the real file. -->
-
-```python
 graph = StateGraph(AgentState)
+graph.add_node("plan", plan)
+graph.add_node("query", query)
+graph.add_node("execute", execute)
+graph.add_node("explain", explain)
+graph.add_node("finalize", finalize)
+graph.add_node("handle_error", handle_error)
+graph.add_node("handle_clarify", handle_clarify)
 
-graph.add_node("node_a", node_a)
-graph.add_node("node_b", node_b)
-graph.add_node("finalize", node_finalize)
-graph.add_node("handle_error", node_handle_error)
-
-graph.set_entry_point("node_a")
-
-graph.add_conditional_edges(
-    "node_a",
-    lambda s: "handle_error" if s.get("error") else "node_b",
-)
-
-graph.add_edge("node_b", "finalize")
+graph.add_edge("plan", "query")
+graph.add_edge("query", "execute")
+graph.add_edge("execute", "explain")
+graph.add_edge("explain", "finalize")
 graph.add_edge("finalize", END)
-graph.add_edge("handle_error", END)
 
-compiled_graph = graph.compile()
+def route_after(state):
+    if state.get("status") == "clarifying":
+        return "handle_clarify"
+    if state.get("error"):
+        return "handle_error"
+    # else continue flow
+    return ...
+
+graph.add_conditional_edges("plan", route_after, {"handle_clarify": "handle_clarify", "handle_error": "handle_error", "query": "query"})
+# same pattern for query and execute
+
+agentic_ai = graph.compile()
 ```
+
+The existing `src/graph/agent.py` and `src/graph/edges.py` are updated in place to implement this assembly.

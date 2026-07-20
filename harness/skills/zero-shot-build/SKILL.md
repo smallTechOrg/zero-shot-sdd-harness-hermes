@@ -69,6 +69,10 @@ Intake has **two fixed sections and a variable middle**:
 2. **Technical round (fixed, always last)** — build-blockers only (LLM provider, stack,
    access method).
 
+**Batch each round: issue ALL of a round's questions as PARALLEL `clarify` calls in ONE
+turn** — one question + one flat `choices` array of plain strings per call; never one
+question per turn, never several questions crammed into one call.
+
 All rounds use `clarify`. Three resilience rules:
 
 - **If `clarify` fails DURING a round** (mid-round timeout, empty result, unavailable), fall
@@ -219,11 +223,19 @@ explicitly. ("Just build it" → narrow MVP, baseline defaults, documented as as
 For the current phase (Phase 1 first; later phases on user approval):
 
 1. **Read the phase's slices** from `spec/roadmap.md`.
-2. **Implement each slice** via the **code-generator** role — delegate independent slices in
-   parallel (up to 3) when `delegate_task` works AND the LLM key is a paid/dedicated one;
-   otherwise inline, sequentially, one slice at a time. **On a shared/free key, prefer
-   sequential inline** — parallel fan-out multiplies 429s on one credential pool and stalls
-   the build (mining the prior runs showed ~14h cumulative blocked on pool exhaustion).
+2. **Implement each slice** via the **code-generator** role. **Budget requests — don't fear
+   them.** Free tiers cap REQUESTS per minute; keep the total across the root and all
+   workers under roughly HALF the provider's cap, and parallelism is fine:
+   - `delegate_task` available → **up to 2–3 workers on independent slices in parallel**,
+     each on disjoint files. If any worker (or the root) hits a rate limit, drop to ONE
+     worker until a full slice completes clean.
+   - No delegation → inline, one slice at a time, in fat turns.
+   **Slice rhythm — one slice ≈ 3 requests:** (1) write the slice's files (tests +
+   implementation) as PARALLEL tool calls in ONE turn; (2) gate + ship in ONE chained
+   command: `pytest -q && git add <files> && git commit -m "phase-N: <slice>" && git push`;
+   (3) a one-line progress note. Never spend two terminal calls where one `&&` chain works;
+   never write one file per turn. If any tool result mentions a rate limit, prepend
+   `sleep 30 && ` to the next terminal command and batch harder.
    Verify each handback's CONTENT, not just its status — a worker can return
    `status=completed` whose body is a rate-limit error; that slice is NOT done. Each slice = its surfaces + its tests, test-first. Tell each generator exactly
    which files it owns; slices own disjoint paths.

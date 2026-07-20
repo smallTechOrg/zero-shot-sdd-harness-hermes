@@ -21,7 +21,7 @@ class Base(DeclarativeBase):
 
 
 class RunRow(Base):
-    """One agent run: input → output, with status + error for observability."""
+    """One agent run: input -> output, with status + error for observability."""
 
     __tablename__ = "runs"
 
@@ -38,4 +38,46 @@ class RunRow(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, default=_now, onupdate=_now
+    )
+
+
+class SessionRow(Base):
+    """Conversation session."""
+
+    __tablename__ = "sessions"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=_uuid)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
+    schema_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conversation_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prior_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    turn_count: Mapped[int] = mapped_column(Text, nullable=False, default=0)
+    # stored as text to match existing migration shape; cast in queries
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, default=_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, default=_now, onupdate=_now
+    )
+
+
+class QueryLogRow(Base):
+    """Append-only query log."""
+
+    __tablename__ = "query_log"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=_uuid)
+    session_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    question: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    generated_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    code_language: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    row_count: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latency_ms: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, default=_now
     )
