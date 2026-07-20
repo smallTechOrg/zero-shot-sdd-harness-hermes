@@ -69,7 +69,24 @@ Intake has **two fixed sections and a variable middle**:
 2. **Technical round (fixed, always last)** — build-blockers only (LLM provider, stack,
    access method).
 
-All rounds use `clarify`. Three resilience rules:
+All rounds use `clarify`. **Five mechanics rules (numbered — follow exactly):**
+
+1. **BATCH each round.** Issue ALL of a round's questions as PARALLEL `clarify` calls in ONE
+   assistant turn — exactly one question + one flat `choices` array per call. Never one call
+   per turn (a 20-question intake as 20 sequential round-trips doubles intake time and
+   re-sends the full context each turn); never multiple questions crammed into one call.
+2. **CHOICES SHAPE.** `choices` is a flat array of plain strings, 4–6 options, no nested
+   arrays/objects, no duplicates. A malformed entry silently drops the option — the user
+   never sees it.
+3. **NO SKILL-TEXT LEAK.** Never copy this file's headings or bullets ("4 questions, all
+   multiSelect", "Tailor options to…") into user-facing question text. The user sees only
+   natural questions about THEIR idea.
+4. **ROUND-EXIT CHECK.** Before leaving a round, count: did you ask every dimension listed
+   for that round (or note it as already answered)? Dropping a listed question is a failure.
+5. **RECAP.** Open each round with a 1–2 sentence recap of what the prior answers
+   established, then the new questions.
+
+Three resilience rules:
 
 - **If `clarify` fails DURING a round** (mid-round timeout, empty result, unavailable), fall
   back to plain text for the REMAINING rounds only — ask one question at a time, wait for the
@@ -160,7 +177,18 @@ spec-writer fill every capability file without a single guess.
 - **How will they access it?** — Web UI, CLI, REST API, scheduled job.
 - **One follow-up** only if something would force a mid-build pause.
 
-**API key** (the only manual user step). **`.env` is a secret-bearing file — Hermes's
+**API-KEY GATE (numbered, mandatory — this is a HARD GATE, not advice):**
+
+1. The moment the technical round's answers land, run the `.env` validation script below via
+   `execute_code`/`terminal` — in THIS turn, before any spec work.
+2. The script must print `PRESENT` (boolean presence) **and** `OK` (one minimal real API
+   call succeeded). Anything else → escalate to the user with the exact reason and re-run
+   after they fix `.env`.
+3. **Stage 2 is INVALID until this session's transcript contains the script's `OK` output.**
+   A live run skipped this check (it was prose, not a gate) and built an entire phase on an
+   unvalidated key. Do not be that run.
+
+**`.env` is a secret-bearing file — Hermes's
 `read_file` tool hard-blocks it outright ("Access denied: ... secret-bearing environment
 file"). Never call `read_file` on `.env` — a live run hit this and, instead of working
 around it, asked the user to manually open the file and confirm, 10 minutes into intake.**
@@ -197,33 +225,78 @@ explicitly. ("Just build it" → narrow MVP, baseline defaults, documented as as
    tests it). **Verify on handback**: no `<!-- FILL IN -->` left, every phase has a runnable
    gate, `spec/agent.md` exists if a framework is chosen. Surface its `Assumed:` flags to
    the user in your next message (don't wait on them).
-2. **SCAFFOLD** — you own git (`harness/rules/git.md`):
+2. **SCAFFOLD** — you own git. **First read `harness/rules/git.md` (actually read it — a
+   live run skipped it and invented its own git flow).** Then:
    - **Clean-baseline precheck (do this FIRST).** A fresh build must start from untouched
      boilerplate: confirm `spec/` still has `<!-- FILL IN -->` markers AND no app/agent
      output dir already exists. If either is already populated, you are on a PRIOR build's
      branch — STOP and confirm with the user before continuing. (A live run inherited an old
      ASP.NET+MSSQL data-analyst spec this way and tried `dotnet`/Docker on a Python box.)
-   - `base=$(git rev-parse --abbrev-ref HEAD)` — capture `<base>` BEFORE branching; never
-     `git checkout main` first (you dogfood the harness version you are on).
-   - `name="feature/<slug>-$(date +%Y%m%d-%H%M)-v0.1"` — the date-time slug makes it unique.
-     Before creating it, `git ls-remote --heads origin "$name"`; if it somehow exists, bump
-     the timestamp. **Never `git checkout` an existing feature branch to build into** — that
-     imports the prior build's stack. Then `git checkout -b "$name"`.
+   - **Run this script VERBATIM** (adapt only `<slug>`) — do not re-derive any step. A live
+     run improvised `git rev-parse --abbrev-ref HEAD~2` (meaningless), silently fell back to
+     the forbidden literal `main`, and opened its PR against `main`:
+
+     ```bash
+     base=$(git rev-parse --abbrev-ref HEAD)          # BEFORE branching — this is <base>
+     name="feature/<slug>-$(date +%Y%m%d-%H%M)-v0.1"  # date-time slug = unique
+     git ls-remote --heads origin "$name"             # must be empty; else bump timestamp
+     git checkout -b "$name"
+     printf '# Build journal — %s\n\n' "$(date -u +%FT%TZ)" > NOTES.md
+     # ... stage spec/ + NOTES.md explicitly, commit, push ...
+     git push -u origin "$name"
+     if [ "$base" = "$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)" ]; then
+       gh pr create --draft --base "$base" --head "$name" \
+         --title "[build — DO NOT MERGE] <title>"        # fresh clone: base IS the default
+     else                                                # branch; a build must NEVER merge
+       gh pr create --base "$base" --head "$name"        # into it, so open as DRAFT
+     fi
+     ```
    - The baseline in `src/` IS the scaffold — generators extend it in place (rename the
      capability slot, never copy beside it). Update `.env.example` for any new env vars.
-   - First commit + push, then open the PR immediately: `gh pr create --base "$base"` —
-     **never `--base main`**. `main` is boilerplate-only, ABSOLUTELY.
+   - `NOTES.md` is the build journal (see "The build journal" below) — it goes into the
+     FIRST commit and gets a timestamped entry at every friction point.
+3. **PROCEED — no permission stop.** The moment `gh pr create` returns a URL, **IMMEDIATELY
+   begin Stage 3 Phase 1 in the same turn.** Do NOT ask the user "shall I proceed?" — the
+   SKILL has no gate here; the next human touchpoint is the Stage 4 testing gate after
+   Phase 1 is built and serving. (A live run paused here un-asked and idled 72 minutes.)
 
 ## Stage 3 — Build one phase (the loop)
 
 For the current phase (Phase 1 first; later phases on user approval):
 
+**The slice loop is numbered — run it per slice, never "all surfaces in one pass":**
+
+1. Pick **ONE** slice from `spec/roadmap.md`.
+2. Write that slice's **TESTS first**.
+3. Implement the slice.
+4. Run the slice gate (`py_compile` + `pytest --collect-only` minimum; the real gate if
+   logic changed). Fix until green.
+5. **Commit + push the slice** (`git commit -m "phase-N: <slice>" && git push`) and post a
+   **one-line progress note** to the user: `Slice 2/5 done — <what>, gate green; next:
+   <what>`. THEN take the next slice.
+
+Never announce "writing all backend surfaces, prompts, and frontend in one pass" — a live
+run did exactly that and shipped 11 type errors on its first write with zero test files.
+Steps 5's two lines are cheap and load-bearing: a live run sat 35+ minutes with 19 dirty
+files and zero commits on a stall-prone endpoint (one crash from losing it all), and its
+silence drew four "are you done?" nudges from the user — each costing a full-context
+re-prefill to answer. Narrate at slice boundaries and nobody has to ask.
+
+Details per step:
+
 1. **Read the phase's slices** from `spec/roadmap.md`.
 2. **Implement each slice** via the **code-generator** role — delegate independent slices in
    parallel (up to 3) when `delegate_task` works AND the LLM key is a paid/dedicated one;
-   otherwise inline, sequentially, one slice at a time. **On a shared/free key, prefer
-   sequential inline** — parallel fan-out multiplies 429s on one credential pool and stalls
-   the build (mining the prior runs showed ~14h cumulative blocked on pool exhaustion).
+   otherwise sequentially, one slice at a time. **Parallel fan-out on a shared/free key is
+   always forbidden** — it multiplies 429s on one credential pool and stalls the build
+   (mining the prior runs showed ~14h cumulative blocked on pool exhaustion). Sequential
+   mode has two sub-modes — pick by CONTEXT SIZE, not by habit:
+   - **Root context lean (< ~60k tokens)** → work inline; delegation overhead isn't worth it.
+   - **Root context heavy (> ~60k) on a NO-CACHE route** → delegate slices **sequentially**
+     (one worker at a time). Every inline call re-prefills the whole root conversation
+     (a live run re-sent 11.6M input tokens across 132 calls at ~135k each); a worker runs
+     the slice in a fresh ~20k context — ~7× cheaper per call, faster, and below the
+     large-context stall zone (live dead-streams occurred at 60k+ and 118k ctx).
    Verify each handback's CONTENT, not just its status — a worker can return
    `status=completed` whose body is a rate-limit error; that slice is NOT done. Each slice = its surfaces + its tests, test-first. Tell each generator exactly
    which files it owns; slices own disjoint paths.
