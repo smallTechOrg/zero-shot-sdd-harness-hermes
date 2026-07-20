@@ -175,3 +175,25 @@ Evidence counts are from `~/.hermes/logs/agent.log*` across Jul 10–20 builds.
   toolchain exists (`uv`, `.venv/bin/python`); there is no `claude`/`dotnet`/`docker` unless
   the spec's stack installed it. Commit or stash before any `git checkout` — a dirty tree
   blocks the switch ("local changes would be overwritten by checkout").
+
+### 21. The SERVING ROUTE matters as much as the model; and models obey gates, not prose
+From a forensic comparison of step-3.7-flash vs hy3 across all Jul-20 builds:
+- **Same model, different route, different build.** `stepfun-ai/step-3.7-flash` (nvidia
+  route): 240 s dead-stream stalls = 43% of agent-active time, ZERO prompt caching (1.87M
+  tokens re-prefilled in 33 min), recurring 429s, ~60 tok/s. The *identical* model as
+  `stepfun/step-3.7-flash` (OpenRouter route): 13/13 clean calls, 83.6% cache hit, ~100
+  tok/s. Before blaming a model, check the provider/base_url in the logs — and prefer the
+  route with prompt caching for long agentic sessions.
+- **Reliability beats latency for unattended builds.** hy3's "magic" was measured as 0 rate
+  limit errors across 2,613 main-loop calls + 83% clean turn completion — that's what
+  survives a 9.5 h overnight build. A faster model that 429s or dead-streams loses more
+  wall-clock than its speed saves.
+- **Prose instructions get skipped; numbered gates get followed.** The same model that
+  ignored a prose paragraph (API-key validation) complied exactly with numbered checklists
+  and reacted immediately to LSP diagnostics. When a step is mandatory, write it as a
+  numbered HARD GATE with an explicit "invalid until X appears in the transcript" clause,
+  and give git/shell sequences as VERBATIM script blocks — models re-derive prose steps
+  badly (one invented `git rev-parse --abbrev-ref HEAD~2` and PR'd against `main`).
+- **Session `model` metadata lies.** Hermes's `sessions.model` records only the LAST model
+  used; mid-session switches mis-attribute entire builds. Attribute work only via per-call
+  `API call #N: model=` log lines.
