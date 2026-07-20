@@ -13,7 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "gemini": "gemini-2.5-flash",
-    "openrouter": "anthropic/claude-sonnet-4-6",
+    "openrouter": "tencent/hy3",  # cheap default ($0.14/M in) — frontier models 402 on unfunded keys; override via AGENT_LLM_MODEL
 }
 
 

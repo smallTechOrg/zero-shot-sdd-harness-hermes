@@ -54,6 +54,11 @@ at a time.**
 implement → run the REAL gate → READ the actual output → fix → re-run
 ```
 
+**Provider stalls & `continue`:** at build start, tell the user in ONE line: "If I ever stop
+with a provider/rate error, just type `continue` — progress is committed as I go, nothing is
+lost." When resumed with `continue` after a stall: re-read `git status`, resume the current
+step exactly where it stopped — no re-planning, no re-reading the spec, no apology.
+
 Never claim, always observe: a gate "passes" only when you ran the exact command and read
 its real output tail this session. Cheap re-verification (`py_compile` + collect-only) after
 mechanical edits; the full real-key gate after logic changes and before any handoff.
