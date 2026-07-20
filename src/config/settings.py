@@ -1,15 +1,11 @@
-"""Application settings — Pydantic BaseSettings, env prefix ``AGENT_``.
-
-The provider key is loaded from ``.env`` (the single manual user step). Presence
-is checked by ``bool`` only — the value is never echoed, logged, or committed.
-"""
+"""Application settings — Pydantic BaseSettings, env prefix ``AGENT_``."""
 from __future__ import annotations
+
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Provider defaults used when AGENT_LLM_MODEL is blank. Verify against current
-# provider docs before pinning — a 404 from the LLM API usually means a stale name.
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "gemini": "gemini-2.5-flash",
@@ -25,22 +21,37 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = Field(default="sqlite:///./data/app.db")
+    # Paths
+    data_dir: Path = Field(default=Path("./data"))
 
-    # "auto" resolves to whichever provider key is set.
+    # Database
+    database_url: str = Field(default="sqlite:///./data/app.db")
+    duckdb_dir: Path = Field(default=Path("./data/sessions"))
+
+    # LLM
     llm_provider: str = Field(default="auto")
     llm_model: str = Field(default="")
-
     anthropic_api_key: str = Field(default="")
     gemini_api_key: str = Field(default="")
     openrouter_api_key: str = Field(default="")
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1")
 
+    # CSV / session limits
+    max_csv_bytes: int = Field(default=100 * 1024 * 1024)  # 100 MB
+    max_sessions: int = Field(default=50)
+    max_history_turns: int = Field(default=20)
+
+    # Rate limiting
+    rate_limit_runs_per_minute: int = Field(default=20)
+
+    # Phase 2
+    mssql_connection_string: str = Field(default="")
+    cache_ttl_seconds: int = Field(default=3600)
+
     log_level: str = Field(default="INFO")
 
     # ----- derived -----
     def resolve_provider(self) -> str:
-        """The effective provider name, or ``"stub"`` when no key is present."""
         p = (self.llm_provider or "auto").strip().lower()
         if p != "auto":
             return p
@@ -72,4 +83,6 @@ def get_settings() -> Settings:
     global _settings
     if _settings is None:
         _settings = Settings()
+        _settings.data_dir.mkdir(parents=True, exist_ok=True)
+        _settings.duckdb_dir.mkdir(parents=True, exist_ok=True)
     return _settings

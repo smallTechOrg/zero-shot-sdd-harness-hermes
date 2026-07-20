@@ -1,0 +1,1 @@
+Summarise the returned rows and provide a clear, concise answer in plain English that directly addresses the original question. Include a short analysis with row count and latency. Propose a chart (bar, line, or pie) if the result supports it. Do not include the raw SQL. Do not include the raw returned rows.
