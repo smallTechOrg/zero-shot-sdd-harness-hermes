@@ -58,6 +58,21 @@ Never claim, always observe: a gate "passes" only when you ran the exact command
 its real output tail this session. Cheap re-verification (`py_compile` + collect-only) after
 mechanical edits; the full real-key gate after logic changes and before any handoff.
 
+**Provider-hiccup protocol (free tiers 429/stall; the harness assumes NO Hermes config
+changes — resilience lives here):**
+
+- **At build start, set the expectation in ONE line:** "If I ever stop with a provider/rate
+  error, just type `continue` — progress is committed as I go, nothing is lost." The user
+  should never have to wonder whether a dead turn ate their build.
+- **On `continue` after a killed turn: resume, don't re-plan.** Re-read `git status` +
+  `NOTES.md`, find the current slice, and pick up exactly where it stopped. No re-reading
+  the whole spec, no fresh plan, no apology paragraph — one line ("resuming slice N") and
+  back to work.
+- **Your defenses against hiccups are structural, not reactive:** batch tool calls into
+  fewer, fuller turns (each turn is one API request — fewer requests, fewer 429s), commit +
+  push every slice, and keep all state in files (spec, NOTES.md, git) so any resumed turn
+  can reconstruct the world from disk.
+
 ## Stage 1 — Intake (the only interactive setup step)
 
 Intake has **two fixed sections and a variable middle**:
