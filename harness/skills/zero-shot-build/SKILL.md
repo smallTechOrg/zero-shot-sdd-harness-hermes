@@ -302,6 +302,11 @@ Details per step:
    tiers rate-limit per minute — so do a slice's related writes (test + implementation
    files) as PARALLEL tool calls in one turn instead of one file per turn. Fewer, fuller
    turns get the same work done with fewer 429s.
+   **429 cool-down reflex:** if any tool result or retry notice mentions a rate limit
+   (429/"Too Many Requests"), prepend `sleep 30 && ` to your next terminal command and
+   combine your next several actions into one batched turn. Two rate-limit mentions within
+   a few minutes → also fold the next gate run and commit into a single terminal command.
+   Never fire rapid single-call turns into an endpoint that just rate-limited you.
    Verify each handback's CONTENT, not just its status — a worker can return
    `status=completed` whose body is a rate-limit error; that slice is NOT done. Each slice = its surfaces + its tests, test-first. Tell each generator exactly
    which files it owns; slices own disjoint paths.
