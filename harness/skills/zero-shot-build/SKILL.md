@@ -235,6 +235,12 @@ For the current phase (Phase 1 first; later phases on user approval):
    command: `pytest -q && git add <files> && git commit -m "phase-N: <slice>" && git push`;
    (3) a one-line progress note. Never spend two terminal calls where one `&&` chain works;
    never write one file per turn.
+   **Anti-thrash rule:** never re-run a failing command unchanged. If the same command
+   fails twice, STOP — read the full error output, then change something (the command, the
+   code, or your diagnosis) before any retry. Repeating an identical failing call is never
+   progress.
+   **Narrate every move:** before each tool batch, one short line — what you're doing and
+   why. Silence reads as a hang and makes the user interrupt a healthy build.
    **Pacing floor (free-tier providers) — steady beats fast:** prepend `sleep 15 && ` to
    EVERY terminal command during build stages. This deliberately holds the loop at a slow,
    even cadence (~2–4 requests/min) — a long-running build that never provokes the rate
