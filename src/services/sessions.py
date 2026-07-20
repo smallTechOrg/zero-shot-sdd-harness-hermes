@@ -50,7 +50,34 @@ def _ingest_single(conn: Any, table: str, raw: bytes) -> int:
     if not rows:
         return 0
     cols = list(rows[0].keys())
-    col_defs = ", ".join(f'"{c}" TEXT' for c in cols)
+
+    # Infer DuckDB types from sample values so numeric columns are INTEGER/DOUBLE.
+    # Without this, SUM(value) on all-TEXT columns raises a type error that the
+    # LLM doesn't recover from cleanly and the run returns 0 rows.
+    col_types: list[str] = ["TEXT"] * len(cols)
+    sample_size = min(len(rows), 200)
+    for ci, col in enumerate(cols):
+        has_int = False
+        has_float = False
+        for ri in range(sample_size):
+            raw_val = rows[ri].get(col)
+            if raw_val in (None, ""):
+                continue
+            try:
+                float(raw_val)
+                # Detect floats with a decimal point or exponent
+                if any(c in raw_val for c in (".", "e", "E")):
+                    has_float = True
+                else:
+                    has_int = True
+            except ValueError:
+                pass
+        if has_float:
+            col_types[ci] = "DOUBLE"
+        elif has_int:
+            col_types[ci] = "INTEGER"
+
+    col_defs = ", ".join(f'"{c}" {t}' for c, t in zip(cols, col_types))
     conn.execute(f'CREATE OR REPLACE TABLE "{table}" ({col_defs})')
     for row in rows:
         values = ", ".join(
