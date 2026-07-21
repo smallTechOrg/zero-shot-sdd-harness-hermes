@@ -1,68 +1,86 @@
 # Architecture
 
-> Fill in this section — see comments below.
+> **Assumed:** No existing UP Police stack was specified at intake; all technology choices below are binding intake answers + documented Assumed flags.
 
 ---
 
 ## System Overview
 
-<!-- FILL IN: One paragraph describing the system at a high level. Who/what interacts with it? -->
+The UP Police Data Analyst Agent is a single-server, on-prem FastAPI application. A user uploads CSVs (or connects to MsSQL) and asks questions in natural language. A LangGraph agent pipeline generates SQL/Python, executes it safely, and returns a code-transparent answer with tables, charts, and downloads — all within the same browser session. An audit log persists every query with query text, generated SQL, row count, latency, and user identity.
 
 ## Component Map
 
-<!-- FILL IN: List the major components and what each does. -->
-
 ```
-[Component A]
-    ↓
-[Component B]   ←→   [External Service]
-    ↓
-[Component C]
+[Browser UI] ──────► [FastAPI app]
+                            │
+                     ┌──────┴──────┐
+                     │  LangGraph  │  ← LLM (on-prem / air-gapped endpoint)
+                     │  agent run  │
+                     └──────┬──────┘
+                            │
+              ┌─────────────┼─────────────┐
+              ▼             ▼             ▼
+        [SQLite /       [MsSQL        [Assets]
+         CSV cache]      pyodbc]       (charts PDF)
+                            ▲
+                     [Query Cache] (dedup + TTL)
+                            ▲
+                     [Audit Log] (SQLite / structured file)
 ```
 
 ## Layers
 
-<!-- FILL IN: Describe the layers of the system (e.g., API → Agent Loop → Tools → Storage). -->
-
 | Layer | Responsibility |
 |-------|----------------|
-| <!-- layer --> | <!-- responsibility --> |
+| API (FastAPI) | Serves UI, accepts uploads, runs queries, returns JSON |
+| Agent loop (LangGraph) | Plans, generates SQL/Python, evaluates, retries, finalizes |
+| Tools | SQL executor (SQLite + MsSQL), chart renderer, report generator |
+| Session / Cache | Dataset metadata + query cache + artifact store |
+| Observability | Structured audit trail + request logging |
 
 ## Data Flow
 
-<!-- FILL IN: Walk through the main data flow from trigger to output. -->
-
-1. Trigger: <!-- how does the agent start? (cron, webhook, user input, etc.) -->
-2. <!-- step 2 -->
-3. <!-- step 3 -->
-4. Output: <!-- what does the agent produce? -->
+1. **Trigger:** User uploads CSVs via POST `/upload` or connects MsSQL via POST `/datasource/connect`.
+2. **Ingest:** CSVs are parsed with pandas, schema inferred (column names, types, sample rows, row counts) → metadata saved to SQLite. MsSQL introspects live schema via `INFORMATION_SCHEMA`.
+3. **Ask:** User submits a natural-language question via POST `/query`. LangGraph pipeline runs:
+   - plan → generate SQL/Python → execute → evaluate → (iterate if confidence < threshold) → finalize
+4. **Render:** API returns: NL answer, generated code block, tabular results (JSON), optional chart data/URLs, artifact download links.
+5. **Audit:** Every query is logged with user, question, SQL, row count, latency, cache hit/miss, success.
 
 ## External Dependencies
 
-<!-- FILL IN: APIs, services, databases the agent depends on. -->
-
 | Dependency | Purpose | Failure Mode |
 |------------|---------|--------------|
-| <!-- name --> | <!-- what it does --> | <!-- what happens if it's down --> |
+| On-prem LLM endpoint | SQL generation + NL answer | Agent surfaces a clear error; queue retry with backoff |
+| MsSQL (Phase 2) | Live production data | Read-only fallback to last cached snapshot if unreachable |
+| SQLite (Phase 1) | CSV-backed query runtime | DB file missing → 500; re-ingestion required |
+| pyodbc | MsSQL connectivity | Connection refused → surface error; MsSQL tab hidden |
 
 ## Stack
 
-> This project's concrete technology choices (captured at intake, filled by the spec-writer). The generic, every-project rules — model-naming, DB driver, dev port, test environment — live in `harness/patterns/tech-stack.md`; this section is only what **this** project picked.
+- **Language:** Python 3.11+
+- **Agent framework:** LangGraph (single-agent loop with one tool-call node; conditional retry edge for iterate-until-right)
+- **LLM provider + model:** On-prem / air-gapped LLM endpoint; configurable via `AGENT_LLM_PROVIDER` + `AGENT_LLM_MODEL` in `.env`. Baseline provider layer already supports Anthropic, Gemini, OpenRouter (extend with custom endpoint).
+- **Backend:** FastAPI
+- **Database + ORM:** SQLite (dev, via SQLAlchemy 2.0); pyodbc (MsSQL Phase 2)
+- **Frontend:** Zero-build static HTML/JS/CSS served at `/app`
+- **Dependency management:** uv + pyproject.toml
 
-- **Language:** <!-- FILL IN: e.g., Python 3.12 -->
-- **Agent framework:** <!-- FILL IN: e.g., LangGraph / custom / none -->
-- **LLM provider + model:** <!-- FILL IN: e.g., Anthropic / claude-sonnet-4-6 -->
-- **Backend:** <!-- FILL IN: e.g., FastAPI / none -->
-- **Database + ORM:** <!-- FILL IN: e.g., PostgreSQL + SQLAlchemy 2.0 / none -->
-- **Frontend:** <!-- FILL IN: e.g., Next.js / none -->
-- **Dependency management:** <!-- FILL IN: e.g., uv + pyproject.toml -->
+| Library | Version | Purpose |
+|---------|---------|---------|
+| fastapi | latest | HTTP API |
+| sqlalchemy | 2.0+ | ORM / DB session |
+| pyodbc | latest | MsSQL connectivity |
+| pandas | latest | CSV parsing + DataFrame ops |
+| langgraph | latest | Agent graph |
+| langchain-core | latest | Prompt + LLM I/O |
+| matplotlib | latest | Chart generation |
+| reportlab / openpyxl | latest | PDF / Excel reports |
+| structlog | latest | Structured logging |
+| python-dotenv | latest | Env loading |
 
-| Key library | Version | Purpose |
-|-------------|---------|---------|
-| <!-- name --> | <!-- ver --> | <!-- purpose --> |
-
-**Avoid:** <!-- FILL IN: libraries/patterns explicitly off-limits, and why -->
+**Avoid:** Any cloud inference in production; direct pandas read of >10 lakh rows without chunking; bare `python` outside the pinned `.venv/bin/python`.
 
 ## Deployment Model
 
-<!-- FILL IN: How does this run? (local script, cloud function, long-running service, etc.) -->
+Long-running FastAPI service (production) or `.venv/bin/python -m src` (dev). MsSQL access via read-only account. LLM endpoint reachable only on internal network. No external egress required or configured.

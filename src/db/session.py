@@ -58,6 +58,7 @@ def create_db_session() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    from src.db.models import Base
+ from src.db.models import Base
+ import src.db.query_run as _query_run  # noqa: F401 — register QueryRun model
 
-    Base.metadata.create_all(bind=_get_engine())
+ Base.metadata.create_all(bind=_get_engine())
