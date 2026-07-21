@@ -15,17 +15,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_MODELS = {
  "anthropic": "claude-sonnet-4-6",
  "gemini": "gemini-2.5-flash",
- "openrouter": "tencent/hy3",  # cheap default — frontier models 402 on unfunded keys; override via AGENT_LLM_MODEL
- "nim": "meta/llama-3-8b-instruct",  # NVIDIA NIM OpenAI-compatible path
+ "openrouter": "tencent/hy3", # cheap default — frontier models 402 on unfunded keys; override via AGENT_LLM_MODEL
+ "nim": "meta/llama-3-8b-instruct", # NVIDIA NIM OpenAI-compatible path
 }
 
 
 class Settings(BaseSettings):
  model_config = SettingsConfigDict(
-  env_prefix="AGENT_",
-  env_file=".env",
-  case_sensitive=False,
-  extra="ignore",
+ env_prefix="AGENT_",
+ env_file=".env",
+ case_sensitive=False,
+ extra="ignore",
  )
 
  database_url: str = Field(default="sqlite:///./data/app.db")
@@ -52,6 +52,7 @@ class Settings(BaseSettings):
 
  # --- CSV / analyst options ---
  analyst_default_row_limit: int = Field(default=100_000)
+ live_db_url: str = Field(default="")
 
  # ----- helpers -----
  def resolve_provider(self) -> str:
