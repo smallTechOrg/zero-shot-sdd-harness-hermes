@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from src.api._common import api_error, ok
@@ -20,6 +20,30 @@ from src.observability.events import get_logger
 
 router = APIRouter()
 log = get_logger("live_db_api")
+
+live_db_api_spec = {
+ "base_path": "/live-db",
+ "paths": {
+  "query": "/live-db/query",
+  "run_detail": "/live-db/runs/{run_id}",
+ },
+ "schema": {
+  "request": {
+   "question": "string",
+   "schema_summary": "string | null",
+   "row_limit": "integer | null",
+  },
+  "response": {
+   "run_id": "string",
+   "status": "string",
+   "generated_sql": "string | null",
+   "answer_text": "string | null",
+   "result_table": "object | null",
+   "served_from_cache": "boolean",
+  },
+ },
+ "notes": "Read-only SQL Server path. schema_summary is required.",
+}
 
 
 @router.post("/query")
@@ -139,3 +163,28 @@ def get_live_db_run(run_id: str, session: Session = Depends(get_session)) -> dic
   answer_text=run.output_text,
  )
  return ok(response.model_dump())
+
+
+@router.get("/runs/{run_id}/download")
+def download_live_db(run_id: str, session: Session = Depends(get_session)) -> dict:
+ run = session.get(RunRow, run_id)
+ if run is None:
+  raise api_error("run_not_found", f"no run with id {run_id}", 404)
+
+ audit = session.query(AuditRow).filter(AuditRow.run_id == run_id).first()
+ result_table = None
+ if audit and audit.sql:
+  try:
+   columns, rows = read_only_query(audit.sql)
+   result_table = {"columns": columns, "rows": rows}
+  except Exception:
+   result_table = None
+
+ return {
+  "run_id": run_id,
+  "file_name": f"result_{run_id}.csv",
+  "content": run.output_text or "",
+  "content_type": "text/csv",
+  "result_table": result_table,
+  "served_from_cache": False,
+ }

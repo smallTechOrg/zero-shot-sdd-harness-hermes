@@ -190,13 +190,16 @@ async function runLiveQuery(question, schemaSummary) {
   setOk(statusEl, `Done in ${data.latency_ms ?? "?"} ms`);
   q("live-result").textContent = data.answer_text || "";
   q("live-result-meta").textContent = `run ${data.run_id} · ${data.provider || "unknown"} · served from cache: ${data.served_from_cache ? "yes" : "no"}`;
+  if (data.run_id) {
+   q("live-download").href = `/live-db/runs/${data.run_id}/download`;
+  }
   if (data.result_table && data.result_table.columns) {
    renderTable("live-table", "live-table-wrap", data.result_table);
   }
   show(q("live-result-wrap"));
- } catch (err) {
+  } catch (err) {
   setError(errorEl, err.message);
- }
+  }
 }
 
 // Event wiring
