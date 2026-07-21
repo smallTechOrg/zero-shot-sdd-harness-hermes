@@ -265,6 +265,14 @@ q("live-query-form").addEventListener("submit", async (e) => {
  await runLiveQuery(question, schema);
 });
 
+q("fraud-query-form").addEventListener("submit", async (e) => {
+ e.preventDefault();
+ const question = q("fraud-question").value.trim();
+ const schema = q("fraud-schema").value.trim();
+ if (!question || !schema) return setError(q("fraud-query-error"), "Question and schema summary are required.");
+ await runFraudQuery(question, schema);
+});
+
 q("refresh-history").addEventListener("click", loadHistory);
 
 document.querySelectorAll(".tab").forEach((btn) => {

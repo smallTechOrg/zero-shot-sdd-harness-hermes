@@ -13,7 +13,7 @@ class RunRequest(BaseModel):
  )
  data_source: str | None = Field(
  default=None,
- pattern="^(transform|csv|live_db|fraud_detection)$",
+ pattern="^(transform|live_db|fraud_detection)$",
  )
 
 

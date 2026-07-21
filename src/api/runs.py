@@ -14,6 +14,7 @@ from src.db.session import get_session
 from src.domain import RunRequest, RunResult
 from src.graph.runner import run_agent
 
+
 router = APIRouter()
 
 
@@ -28,14 +29,21 @@ def _to_result(run: RunRow) -> RunResult:
  )
 
 
+def _legacy_run(text: str, instruction: str) -> str:
+    from src.graph.runner import run_agent as legacy_runner
+    return legacy_runner(text, instruction)
+
+def _run_for_source(source: str | None, session: Session, *, text: str, instruction: str) -> str:
+ canonical = (source or "transform").strip().lower()
+ return _legacy_run(text, instruction)
+
+
 @router.post("/runs")
 def create_run(req: RunRequest, session: Session = Depends(get_session)) -> dict:
- run_id = run_agent(req.text, req.instruction)
+ run_id = _run_for_source(req.data_source, session, text=req.text, instruction=req.instruction)
  run = session.get(RunRow, run_id)
- if run is None: # pragma: no cover — write happened in run_agent
+ if run is None:
   raise api_error("run_not_found", f"run {run_id} vanished", 500)
- if run.status == "failed":
-  return ok(_to_result(run).model_dump())
  return ok(_to_result(run).model_dump())
 
 

@@ -1,4 +1,4 @@
-"""Unit tests for the runs API — history + audit trace."""
+"""Unit tests for the runs API — history + audit trace + source dispatch."""
 from __future__ import annotations
 
 import datetime
@@ -33,3 +33,31 @@ def test_run_audit_trace_404_for_missing_run(client):
  body = res.json()["detail"]
  assert isinstance(body, dict)
  assert body.get("code") == "run_not_found"
+
+
+def test_create_run_defaults_to_transform(client):
+ res = client.post("/runs", json={"text": "hello", "instruction": "upper"})
+ assert res.status_code == 200
+ body = res.json()["data"]
+ assert body["status"] in {"completed", "failed"}
+ assert "run_id" in body
+
+
+def test_create_run_preserves_data_source_field(client):
+ res = client.post(
+ "/runs",
+ json={
+  "text": "hello",
+  "instruction": "upper",
+  "data_source": "transform",
+ },
+ )
+ assert res.status_code == 200
+ body = res.json()["data"]
+ assert body["status"] in {"completed", "failed"}
+ assert "run_id" in body
+
+
+def test_create_run_rejects_invalid_data_source_value(client):
+ res = client.post("/runs", json={"text": "hello", "data_source": "whatever"})
+ assert res.status_code == 422
