@@ -3,20 +3,26 @@ from __future__ import annotations
 
 from langgraph.graph import END, StateGraph
 
-from src.graph.edges import after_transform
-from src.graph.nodes import finalize, handle_error, transform_text
+from src.graph.edges import after_execute_tool, after_plan_query
+from src.graph.nodes import execute_tool, finalize, handle_error, plan_query
 from src.graph.state import AgentState
 
 
 def _build_graph():
     g = StateGraph(AgentState)
-    g.add_node("transform_text", transform_text)
-    g.add_node("handle_error", handle_error)
+    g.add_node("plan_query", plan_query)
+    g.add_node("execute_tool", execute_tool)
     g.add_node("finalize", finalize)
-    g.set_entry_point("transform_text")
+    g.add_node("handle_error", handle_error)
+    g.set_entry_point("plan_query")
     g.add_conditional_edges(
-        "transform_text",
-        after_transform,
+        "plan_query",
+        after_plan_query,
+        {"execute_tool": "execute_tool", "handle_error": "handle_error"},
+    )
+    g.add_conditional_edges(
+        "execute_tool",
+        after_execute_tool,
         {"finalize": "finalize", "handle_error": "handle_error"},
     )
     g.add_edge("finalize", END)

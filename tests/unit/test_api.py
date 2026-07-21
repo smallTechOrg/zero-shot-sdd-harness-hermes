@@ -50,7 +50,6 @@ def test_frontend_served_at_app():
     with _client() as client:
         res = client.get("/app/")
         assert res.status_code == 200
-        assert "Zero-Shot Agent" in res.text
-        # styles + js referenced (single-origin)
+        assert "UP Police Data Analyst" in res.text
         assert "styles.css" in res.text
         assert "app.js" in res.text
