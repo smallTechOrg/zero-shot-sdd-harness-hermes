@@ -4,7 +4,7 @@ This directory is the authoritative specification for this project. All code mus
 
 ## Status
 
-Check `spec/roadmap.md` to see if the spec has been filled in. If it still contains `<!-- FILL IN -->` markers, the spec-writer sub-agent needs to complete it before any application code is written.
+`spec/roadmap.md` is complete. The current agent is a **data analysis agent** for CSV/JSON natural-language Q&A with insight summaries and chart specs.
 
 ## Structure
 
@@ -19,12 +19,6 @@ spec/                 ← The product (you read & edit this)
   api.md           ← API surface (REST/GraphQL/CLI/etc.)
   ui.md            ← UI requirements (if any)
   capabilities/    ← One file per discrete capability
-
-harness/              ← How to build it (generic engineering doctrine)
-  rules/           ← Mandatory rules (ai-agents, git, secret-hygiene)
-  patterns/        ← phases, project-layout, test-driven, ui-ux, engineering-practices,
-                     spec-driven, tech-stack (generic stack rules), code (conventions),
-                     agentic-ai (pattern catalogue)
 ```
 
 ## Governance Rules

@@ -1,8 +1,4 @@
-"""run_agent() — the entry point the API calls.
-
-Creates the run row, invokes the graph, persists the outcome. Errors land in
-the row (status=failed + message), never as a crash.
-"""
+"""run_agent() — the entry point the API calls."""
 from __future__ import annotations
 
 from src.db.models import RunRow
@@ -12,11 +8,15 @@ from src.graph.state import AgentState
 from src.observability.events import get_logger, log_span
 
 
-def run_agent(input_text: str, instruction: str) -> str:
+def run_agent(input_text: str, instruction: str, *, file_count: int = 0) -> str:
     log = get_logger("runner")
 
     with create_db_session() as session:
-        run = RunRow(input_text=input_text, instruction=instruction, status="running")
+        run = RunRow(
+            input_text=input_text,
+            instruction=instruction,
+            status="running",
+        )
         session.add(run)
         session.flush()
         run_id = run.id
@@ -26,6 +26,7 @@ def run_agent(input_text: str, instruction: str) -> str:
         "input_text": input_text,
         "instruction": instruction,
         "error": None,
+        "file_count": file_count,
     }
     with log_span(log, "agent_run", run_id=run_id) as span:
         final: AgentState = agentic_ai.invoke(initial)

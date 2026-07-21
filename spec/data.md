@@ -1,34 +1,43 @@
 # Data Model
 
-> Fill in this section — see comments below.
-
----
+> How data is stored and what it represents.
 
 ## Storage Technology
 
-<!-- FILL IN: What database/storage does this project use and why? -->
+SQLite via SQLAlchemy 2.0 in Phase 1. Uses `alembic.ini` for schema evolution; baseline also supports `init_db()` auto-creation. PostgreSQL is the production target for any shared/multi-user deployment.
 
 ## Entities
 
-<!-- FILL IN: One section per major entity. -->
+### Entity: `RunRow` (`runs`)
 
-### Entity: <!-- Name -->
-
-<!-- FILL IN: What does this entity represent? -->
+One agent execution record with inputs, outputs, and execution metadata.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| id | <!-- type --> | yes | Primary key |
-| <!-- field --> | <!-- type --> | <!-- yes/no --> | <!-- description --> |
+| `id` | `TEXT` | yes | UUID primary key |
+| `status` | `TEXT` | yes | `pending` / `running` / `completed` / `failed` |
+| `input_text` | `TEXT` | yes | User's raw CSV/JSON or text payload |
+| `instruction` | `TEXT` | yes | User's natural-language question |
+| `output_text` | `TEXT` | no | LLM-generated insight summary |
+| `provider` | `TEXT` | no | Active LLM provider |
+| `model` | `TEXT` | no | Active LLM model |
+| `error_message` | `TEXT` | no | Failure reason when `status=failed` |
+| `created_at` | `TIMESTAMP` | yes | UTC creation time |
+| `updated_at` | `TIMESTAMP` | yes | UTC last-updated time |
 
 ### Relationships
 
-<!-- FILL IN: How do entities relate to each other? -->
+- `RunRow` is the only persisted entity in Phase 1.
+- `RunRow.id` is referenced by the API endpoint `GET /runs/{run_id}`.
+- Future phases may add a `RunArtifact` or `FileRecord` to hold uploaded files and derived chart metadata.
 
 ## Data Lifecycle
 
-<!-- FILL IN: When is data created, updated, and deleted? Is anything time-boxed or archived? -->
+- **Create:** API `POST /runs` creates a `RunRow` with `status=running`.
+- **Update:** `run_agent()` updates the row with final status/output/provider/model/error when the graph completes.
+- **Read:** API `GET /runs/{run_id}` returns the latest state.
+- **Delete:** Not exposed in Phase 1; expected in a later settings/admin surface.
 
 ## Sensitive Data
 
-<!-- FILL IN: What fields contain PII or secrets? How are they protected? -->
+> **Assumed:** Phase 1 treats user-supplied input as transient; `input_text` is stored as text for debugging and history but is not encrypted at rest. No PII classification is applied in Phase 1. If user data is sensitive, they must use a self-hosted deployment with encrypted storage.

@@ -13,3 +13,4 @@ class AgentState(TypedDict, total=False):
     model: str
     status: str
     error: str | None
+    file_count: int

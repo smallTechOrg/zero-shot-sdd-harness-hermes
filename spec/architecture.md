@@ -1,68 +1,90 @@
 # Architecture
 
-> Fill in this section — see comments below.
-
----
+> The source of truth for how the system is structured, how data moves, and what each component owns.
 
 ## System Overview
 
-<!-- FILL IN: One paragraph describing the system at a high level. Who/what interacts with it? -->
-
-## Component Map
-
-<!-- FILL IN: List the major components and what each does. -->
-
 ```
-[Component A]
-    ↓
-[Component B]   ←→   [External Service]
-    ↓
-[Component C]
+Browser (static /app)
+     │
+     ▼
+FastAPI app (src/api)
+  - POST /runs accepts multipart CSV files + instruction
+  - GET /runs/{run_id} retrieves history
+     │
+     ▼
+LangGraph agent (src/graph)
+  ├─ analyze_data (Phase 1)
+  └─ mssql_federation (Phase 2)
+     │
+     ▼
+LLM provider layer (src/llm)
+  ├─ Anthropic | Gemini | OpenRouter-compatible
+     │
+     ▼
+Persistent store (src/db)
+  ├─ SQLite for run history + cache metadata (Phase 1–2)
+  └─ Read-only MsSQL connector for live production queries (Phase 2)
 ```
 
-## Layers
+The FastAPI app serves the UI and the `/runs` + `/health` endpoints. Each run creates a `RunRow`, builds an `AgentState`, and compiles it through a LangGraph `StateGraph[AgentState]`. Errors are captured in state and persisted as `status=failed`; the graph never raises into the API layer.
 
-<!-- FILL IN: Describe the layers of the system (e.g., API → Agent Loop → Tools → Storage). -->
+## Components
 
-| Layer | Responsibility |
-|-------|----------------|
-| <!-- layer --> | <!-- responsibility --> |
+| Component | Path | Responsibility |
+|-----------|------|---------------|
+| Server / routes | `src/api/` | HTTP envelope, JSON responses, frontend mount at `/app` |
+| Graph | `src/graph/` | LangGraph assembly, state typing, nodes, edges |
+| Capability nodes | `src/graph/nodes.py` | `analyze_data` in Phase 1; `mssql_federation` in Phase 2 |
+| Prompts | `src/prompts/` | System prompt templates loaded by nodes |
+| LLM layer | `src/llm/` | Provider factory, adapters, retry |
+| Persistence | `src/db/` | SQLAlchemy SQLite for history; optional MsSQL engine/cache |
+| Frontend | `frontend/public/` | Static HTML/CSS/JS served at `/app` |
+| Observability | `src/observability/` | structlog, spans |
 
 ## Data Flow
 
-<!-- FILL IN: Walk through the main data flow from trigger to output. -->
+1. Analyst selects 1–many CSV file inputs and types a natural-language question in the `/app` UI.
+2. Frontend issues `multipart/form-data POST /runs` with `instruction` plus `files[]`.
+3. API validates input size/file types and writes `RunRow(status=running)` with `instruction` and representative `input_text`.
+4. LangGraph builds `AgentState` and invokes the Phase-1 `analyze_data` node:
+   - parses each CSV into schema + head/tail snippets,
+   - joins on common or explicitly named key columns,
+   - calls the LLM once for structured JSON output containing `insight`, `table_summary`, and `chart_spec`.
+5. API updates `RunRow` from final state and returns it.
+6. Phase 2 routes known question patterns through the MsSQL federation layer first; on cache miss it executes a read-only query, stores the aggregate, and returns the result.
 
-1. Trigger: <!-- how does the agent start? (cron, webhook, user input, etc.) -->
-2. <!-- step 2 -->
-3. <!-- step 3 -->
-4. Output: <!-- what does the agent produce? -->
+## Data Entities
 
-## External Dependencies
+- `RunRow`: one row per agent execution with fields: `run_id`, `status`, `input_text`, `instruction`, `output_text`, `provider`, `model`, `error_message`, `created_at`, `updated_at`.
+- Phase 2 may extend run metadata with cache-specific fields (`cache_hit`, `cache_key`, `mssql_latency_ms`, `query_hash`).
 
-<!-- FILL IN: APIs, services, databases the agent depends on. -->
+## Error Paths
 
-| Dependency | Purpose | Failure Mode |
-|------------|---------|--------------|
-| <!-- name --> | <!-- what it does --> | <!-- what happens if it's down --> |
+- CSV parse or schema inference fails → captured in `state["error"]`, routed to `handle_error`, surfaced as `status=failed`.
+- LLM call fails → same failed-run path.
+- Input exceeds size gate → API returns `400` with a clear validation error before graph execution.
+- Phase 2: cache unavailable or MsSQL unreachable → falls back to live query if allowed, otherwise fails the run explicitly.
+
+## Config / Env
+
+- `.env` is the only manual setup step; exactly one provider key required.
+- `PORT`, `AGENT_LOG_LEVEL`, `AGENT_DATABASE_URL` stay baseline.
+- `AGENT_DATABASE_URL_MSSQL` and cache tuning land in Phase 2.
 
 ## Stack
 
-> This project's concrete technology choices (captured at intake, filled by the spec-writer). The generic, every-project rules — model-naming, DB driver, dev port, test environment — live in `harness/patterns/tech-stack.md`; this section is only what **this** project picked.
+| Concern | Choice | Notes |
+|---------|--------|-------|
+| Language | Python 3.11+ | Baseline |
+| Runtime | FastAPI + Uvicorn | Baseline |
+| Agent framework | LangGraph ≥0.2.28 | Baseline |
+| DB driver / ORM | SQLAlchemy 2.0 + SQLite | Baseline/Metadata store |
+| MsSQL driver | `pymssql` or `pyodbc` | Phase 2 only |
+| Migrations | Alembic | Baseline support |
+| Frontend | Static HTML/CSS/JS at `frontend/public/` | Baseline; no npm/bundler |
+| LLM access | httpx, provider layer | Anthropic/Gemini/OpenRouter-compatible |
+| Observability | structlog | Baseline |
+| Tests | pytest + TestClient | Phase 1 integration smoke |
 
-- **Language:** <!-- FILL IN: e.g., Python 3.12 -->
-- **Agent framework:** <!-- FILL IN: e.g., LangGraph / custom / none -->
-- **LLM provider + model:** <!-- FILL IN: e.g., Anthropic / claude-sonnet-4-6 -->
-- **Backend:** <!-- FILL IN: e.g., FastAPI / none -->
-- **Database + ORM:** <!-- FILL IN: e.g., PostgreSQL + SQLAlchemy 2.0 / none -->
-- **Frontend:** <!-- FILL IN: e.g., Next.js / none -->
-- **Dependency management:** <!-- FILL IN: e.g., uv + pyproject.toml -->
-
-| Key library | Version | Purpose |
-|-------------|---------|---------|
-| <!-- name --> | <!-- ver --> | <!-- purpose --> |
-
-**Avoid:** <!-- FILL IN: libraries/patterns explicitly off-limits, and why -->
-
-## Deployment Model
-
-<!-- FILL IN: How does this run? (local script, cloud function, long-running service, etc.) -->
+> **Assumed:** Phase 1 adds no mandatory new env vars beyond existing baseline. Phase 2 adds one optional connection string.

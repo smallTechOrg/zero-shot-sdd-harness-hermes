@@ -1,218 +1,88 @@
 # Agent
 
-> Required when the project uses an agent framework. Delete this file if your project has no agent framework.
->
-> If your project has no agent framework (e.g., a simple script or single-LLM API call), delete this file.
->
+> The agent graph contract and runtime behavior. Required because this project uses LangGraph.
 
----
+## Pattern
 
-## Agent Architecture Pattern
+- **Type:** Single-step planner + executor.
+- **Source:** `harness/patterns/agentic-ai.md` — one LLM call per run with structured JSON output; no internal loops; errors do not raise into the API.
+- **Why:** Deterministic latency and cost for Phase 1. Federation/cache routing is added in Phase 2.
 
-<!-- FILL IN: Which pattern does this agent follow? Choose one and describe why. -->
+## State
 
-| Pattern | Use when |
-|---------|----------|
-| **Single-agent loop** | One LLM drives a deterministic tool-call loop. No branches, no handoffs. |
-| **Graph (LangGraph)** | Multi-step pipeline with conditional edges, checkpointing, or parallel nodes. |
-| **Multi-agent** | Specialised sub-agents with distinct roles; orchestrator routes between them. |
-| **Supervisor** | One supervisor LLM dispatches to worker agents based on task type. |
-| **Human-in-the-loop** | Execution pauses at defined checkpoints for user review or approval. |
-
-**Chosen:** <!-- state pattern + one-sentence rationale -->
-
----
-
-## LLM Provider & Model
-
-<!-- FILL IN: Which model drives each agent/node? State provider, model ID, and why. -->
-
-| Agent / Node | Provider | Model ID | Rationale |
-|-------------|----------|----------|-----------|
-| <!-- node --> | Anthropic | <!-- e.g. claude-sonnet-4-6 --> | <!-- latency vs. quality trade-off --> |
-
-**Fallback behaviour:** <!-- Production resilience only: retry/backoff, degraded mode, or a surfaced error if the LLM API is unavailable or rate-limited. NOT a test/offline stub path — tests call the real API with keys from `.env`. -->
-
-**Prompt strategy:** <!-- System/user split, few-shot examples, structured output (tool_use / JSON mode)? -->
-
----
-
-## Tools & Tool Calling
-
-<!-- FILL IN: Every tool the agent can call. -->
-
-| Tool name | Description | Inputs | Output | Side-effects |
-|-----------|-------------|--------|--------|--------------|
-| <!-- name --> | <!-- what it does --> | <!-- params --> | <!-- return type --> | <!-- DB write, API call, file write, etc. --> |
-
-**Tool selection strategy:** <!-- How does the agent decide which tool to call? (LLM choice, rule-based routing, forced single tool) -->
-
-**Tool failure handling:** <!-- retry, fallback, abort — per tool or global policy? -->
-
----
-
-## Agent State
-
-<!-- FILL IN: The full state type. Every field must be named, typed, and annotated with what populates it. -->
+`AgentState` flows through the graph.
 
 ```python
-class AgentState(TypedDict):
-    # Identity
-    run_id: int                          # set at initialisation
-
-    # Input
-    # ...                                # fields populated from the trigger
-
-    # Pipeline data (populated progressively by nodes)
-    # ...
-
-    # Output
-    # ...                                # final result fields
-
-    # Control
-    error: str | None                    # set by any node on fatal failure
-    checkpoint: str | None              # last completed node (for resume)
+class AgentState(TypedDict, total=False):
+    run_id: str
+    input_text: str
+    instruction: str
+    output_text: str
+    provider: str
+    model: str
+    status: str
+    error: str | None
 ```
 
----
+- `input_text` may hold serialized schema summaries for multiple uploaded files.
+- `output_text` holds the final insight text summarizing combined-file findings.
+- Phase 1 does not change state shape from the baseline.
 
-## Nodes / Steps
+## Nodes
 
-<!-- FILL IN: One section per node. For single-agent loops, describe each "step" or "tool call phase." -->
+| Node | File:function | Responsibility |
+|------|--------------|---------------|
+| `analyze_data` | `src/graph/nodes.py::analyze_data` | Parse uploaded CSV inputs to schema+summary, build LLM prompt, call LLM once, return `output_text`, `provider`, `model`. Captures failures in `error`. |
+| `handle_error` | `src/graph/nodes.py::handle_error` | Marks run `status=failed`. |
+| `finalize` | `src/graph/nodes.py::finalize` | Marks run `status=completed`. |
 
-### `node_[name]`
+## Edges
 
-**Reads from state:** <!-- field names -->
+| From | Condition | To |
+|------|-----------|----|
+| `analyze_data` | `error` is truthy | `handle_error` |
+| `analyze_data` | otherwise | `finalize` |
+| `finalize` | — | `END` |
+| `handle_error` | — | `END` |
 
-**Writes to state:** <!-- field names -->
+## Error Handler
 
-**LLM call:** <!-- yes/no; if yes: prompt template summary, model used, output format -->
+- Node catches `LLMError` and any parsing exception and returns `{"error": str(exc)}`.
+- The graph never raises; errors become failed runs in `RunRow.error_message`.
 
-**External calls:**
+## Concurrency
 
-| System | Operation | On Failure |
-|--------|-----------|------------|
-| <!-- system --> | <!-- what it calls --> | <!-- fatal (set error) / partial (log + continue) / retry --> |
+- Graph compiled once at import; each run is synchronous within the FastAPI request.
+- No fan-out or parallel tool use in Phase 1.
 
-**Behaviour:** <!-- One paragraph. What decision or transformation does this node perform? -->
+## Assembly
 
----
-
-## Graph / Flow Topology
-
-<!-- FILL IN: ASCII diagram of node flow. Show ALL conditional edges explicitly. -->
-
+```python
+def _build_graph():
+    g = StateGraph(AgentState)
+    g.add_node("analyze_data", analyze_data)
+    g.add_node("handle_error", handle_error)
+    g.add_node("finalize", finalize)
+    g.set_entry_point("analyze_data")
+    g.add_conditional_edges(
+        "analyze_data",
+        after_transform,
+        {"finalize": "finalize", "handle_error": "handle_error"},
+    )
+    g.add_edge("finalize", END)
+    g.add_edge("handle_error", END)
+    return g.compile()
 ```
-START
-  │
-  ▼
-node_a ──(error)──► node_handle_error ──► END
-  │
-  ▼
-node_b ──(condition)──► node_c
-  │                         │
-  │                         ▼
-  └──────────────────► node_finalize
-                             │
-                             ▼
-                            END
-```
 
-**Conditional edges:**
+## Federation Layer — Phase 2
 
-| Source node | Condition | Target |
-|-------------|-----------|--------|
-| <!-- node --> | <!-- e.g. state["error"] is not None --> | <!-- target node --> |
+> **Assumed:** query fingerprinting uses normalized question + selected parameters as the cache key; cache entries expire based on a configurable TTL; MsSQL access is read-only with no mutations.
 
----
-
-## Memory & Context
-
-<!-- FILL IN: How does the agent remember things across turns, steps, or runs? -->
-
-| Scope | Mechanism | What is stored |
-|-------|-----------|----------------|
-| **Within a run** | LangGraph state | All in-progress data |
-| **Across runs** | <!-- DB / vector store / none --> | <!-- e.g. past results, user prefs --> |
-| **Conversation** | <!-- message history / summary / none --> | <!-- if chat-style --> |
-
-**Context window management:** <!-- How is the prompt kept within limits? (summary, sliding window, RAG retrieval) -->
-
----
-
-## Human-in-the-Loop Checkpoints
-
-<!-- FILL IN: Where does execution pause for human input? Delete section if not applicable. -->
-
-| Checkpoint | What is shown to the user | Expected user action | Timeout / default |
-|------------|--------------------------|----------------------|-------------------|
-| <!-- name --> | <!-- what the agent surfaces --> | <!-- approve / edit / abort --> | <!-- timeout action --> |
-
----
-
-## Error Handling & Recovery
-
-<!-- FILL IN: How the agent handles failures at each level. -->
-
-**Node-level:** <!-- Each node catches its own exceptions; fatal errors set state["error"] and route to handle_error node. -->
-
-**Graph-level (handle_error node):**
-- Reads: `state.error`, `state.run_id`
-- Updates DB: run status → "failed", `error_message`, `completed_at`
-- Logs error with `run_id` context
-- Terminates graph
-
-**Resume / retry strategy:** <!-- Can a failed run be resumed from its last checkpoint? How? -->
-
-**Partial failure:** <!-- If a non-critical step fails, does the agent degrade gracefully or abort? -->
-
----
+- Cache is a SQLite-backed aggregate store keyed by `query_hash`.
+- Misses execute read-only SQL through a dedicated `mssql_federation` node.
+- Each node call emits `cache_hit`, `query_hash`, and latency in run metadata.
 
 ## Observability
 
-<!-- FILL IN: What is logged, traced, and measured? -->
-
-| Signal | What | Where |
-|--------|------|-------|
-| **Trace** | One trace per run, one span per node | <!-- OpenTelemetry / LangSmith / stdout --> |
-| **LLM calls** | Prompt tokens, completion tokens, latency, model | <!-- LangSmith / structured log --> |
-| **Tool calls** | Tool name, inputs, success/error, latency | Structured log |
-| **Run outcome** | Status, total duration, error if any | DB + structured log |
-
----
-
-## Concurrency Model
-
-<!-- FILL IN: How concurrent agent runs are handled. -->
-
-- **Run isolation:** <!-- one-at-a-time (API returns 409) / queue / parallel with run_id scoping -->
-- **Parallel nodes within a run:** <!-- which nodes run in parallel and why -->
-- **Checkpointing:** <!-- none / SqliteSaver / PostgresSaver — required if human-in-the-loop or long-running -->
-
----
-
-## Graph Assembly (`agent/graph.py`)
-
-<!-- FILL IN: Pseudocode showing how nodes and edges are wired. Must be ≤ 60 lines in the real file. -->
-
-```python
-graph = StateGraph(AgentState)
-
-graph.add_node("node_a", node_a)
-graph.add_node("node_b", node_b)
-graph.add_node("finalize", node_finalize)
-graph.add_node("handle_error", node_handle_error)
-
-graph.set_entry_point("node_a")
-
-graph.add_conditional_edges(
-    "node_a",
-    lambda s: "handle_error" if s.get("error") else "node_b",
-)
-
-graph.add_edge("node_b", "finalize")
-graph.add_edge("finalize", END)
-graph.add_edge("handle_error", END)
-
-compiled_graph = graph.compile()
-```
+- Each run emits `input_chars`, `file_count`, row/share summaries when feasible, and `output_chars`.
+- The span is tagged with `provider`, `model`, `run_id`, and final `status`.

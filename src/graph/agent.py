@@ -4,18 +4,18 @@ from __future__ import annotations
 from langgraph.graph import END, StateGraph
 
 from src.graph.edges import after_transform
-from src.graph.nodes import finalize, handle_error, transform_text
+from src.graph.nodes import analyze_data, finalize, handle_error
 from src.graph.state import AgentState
 
 
 def _build_graph():
     g = StateGraph(AgentState)
-    g.add_node("transform_text", transform_text)
+    g.add_node("analyze_data", analyze_data)
     g.add_node("handle_error", handle_error)
     g.add_node("finalize", finalize)
-    g.set_entry_point("transform_text")
+    g.set_entry_point("analyze_data")
     g.add_conditional_edges(
-        "transform_text",
+        "analyze_data",
         after_transform,
         {"finalize": "finalize", "handle_error": "handle_error"},
     )

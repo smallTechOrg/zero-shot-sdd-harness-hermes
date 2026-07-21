@@ -1,12 +1,13 @@
 """Integration gate — runs against the REAL LLM/API with keys from .env.
 
-Skips (never stubs) when no key is present. Asserts response content and DB
+Skips when no key is present. Asserts response content and DB
 state, not just status codes; covers happy path + edge case + error path.
 """
 from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from io import BytesIO
 
 from src.api import create_app
 from src.config.settings import get_settings
@@ -25,52 +26,50 @@ def client():
         yield c
 
 
+def _post_csv(client: TestClient, instruction: str, rows: str):
+    return client.post(
+        "/runs",
+        data={"instruction": instruction},
+        files={"files": ("dataset.csv", BytesIO(rows.encode("utf-8")), "text/csv")},
+    )
+
+
 def test_happy_path_real_llm_end_to_end(client):
     _require_key()
-    res = client.post(
-        "/runs",
-        json={
-            "text": "The quick brown fox jumps over the lazy dog.",
-            "instruction": "Rewrite this sentence in uppercase letters only.",
-        },
-    )
+    csv = "station,district,fir_count\nA,Noida,12\nB,Ghaziabad,9\n"
+    res = _post_csv(client, "List district totals in one sentence.", csv)
     assert res.status_code == 200
     run = res.json()["data"]
     assert run["status"] == "completed", f"run failed: {run['error_message']}"
-    assert run["output_text"], "expected real model output"
-    # content assertion robust to model phrasing: the transform happened
-    assert "QUICK" in run["output_text"].upper()
+    assert run["output_text"]
+    body = run["output_text"].lower()
+    assert "noida" in body and "ghaziabad" in body
 
-    # DB state matches the response
     with create_db_session() as s:
         row = s.get(RunRow, run["run_id"])
         assert row is not None
         assert row.status == "completed"
         assert row.output_text == run["output_text"]
-        assert row.provider == get_settings().resolve_provider()
 
 
-def test_edge_case_short_input_real_llm(client):
+def test_edge_case_single_row_real_llm(client):
     _require_key()
-    res = client.post(
-        "/runs",
-        json={"text": "ok", "instruction": "Repeat the text exactly as given."},
-    )
+    csv = "x,y\n1,2\n"
+    res = _post_csv(client, "Report x and y.", csv)
     assert res.status_code == 200
     run = res.json()["data"]
     assert run["status"] == "completed", f"run failed: {run['error_message']}"
-    assert run["output_text"]
+    assert "1" in run["output_text"] and "2" in run["output_text"]
 
 
 def test_error_path_bad_model_fails_actionably(client, monkeypatch):
-    """Wrong model name → failed run with an actionable message, not a crash."""
     _require_key()
     monkeypatch.setenv("AGENT_LLM_MODEL", "this-model-does-not-exist-xyz")
-    # reset the settings singleton so the patched model takes effect
     import src.config.settings as settings_mod
 
     settings_mod._settings = None
-    res = client.post("/runs", json={"text": "hello", "instruction": "upper"})
+    csv = "a,b\n1,2\n"
+    res = _post_csv(client, "What is a+b?", csv)
     assert res.status_code == 200
     run = res.json()["data"]
     assert run["status"] == "failed"

@@ -1,5 +1,4 @@
-// Zero-build baseline frontend. Single-origin: the page is served by the
-// backend at /app, so API calls are same-origin relative paths.
+// CrimAnalyze frontend — multi-file CSV upload + officer question.
 "use strict";
 
 const $ = (id) => document.getElementById(id);
@@ -22,33 +21,48 @@ async function loadHealth() {
   }
 }
 
-async function runTransform() {
+async function runAnalyze() {
   const btn = $("run-btn");
   const status = $("status");
   const errBox = $("error");
   const wrap = $("result-wrap");
 
-  const text = $("text").value.trim();
+  const files = ($("files").files || []);
   const instruction = $("instruction").value.trim();
 
   errBox.hidden = true;
   wrap.hidden = true;
 
-  if (!text) {
-    errBox.textContent = "Paste some text first — the input can't be empty.";
+  if (!files.length) {
+    errBox.textContent = "Upload at least one CSV file.";
+    errBox.hidden = false;
+    return;
+  }
+  if (!instruction) {
+    errBox.textContent = "Type an investigator question first.";
+    errBox.hidden = false;
+    return;
+  }
+  if (files.length > 12) {
+    errBox.textContent = "You can upload at most 12 files in one run.";
     errBox.hidden = false;
     return;
   }
 
   btn.disabled = true;
-  status.textContent = "Running… (one real LLM call)";
+  status.textContent = `Analyzing ${files.length} file(s)... (one real LLM call)`;
   status.hidden = false;
 
   try {
+    const form = new FormData();
+    form.append("instruction", instruction);
+    for (const file of files) {
+      form.append("files", file, file.name || "data.csv");
+    }
+
     const res = await fetch("/runs", {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, instruction }),
+      body: form,
     });
     const body = await res.json();
 
@@ -60,9 +74,9 @@ async function runTransform() {
     if (run.status === "failed") {
       throw new Error(run.error_message || "The agent run failed.");
     }
-    $("result").textContent = run.output_text;
+    $("result").textContent = run.output_text || "";
     $("result-meta").textContent =
-      `run ${run.run_id} · ${run.provider} · ${run.model}`;
+      `run ${run.run_id} · ${run.provider} · ${run.model} · ${run.file_count} file(s)`;
     wrap.hidden = false;
   } catch (err) {
     errBox.textContent = err.message;
@@ -73,5 +87,5 @@ async function runTransform() {
   }
 }
 
-$("run-btn").addEventListener("click", runTransform);
+$("run-btn").addEventListener("click", runAnalyze);
 loadHealth();

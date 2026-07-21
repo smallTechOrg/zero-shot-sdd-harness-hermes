@@ -3,31 +3,36 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zero-Shot Agent — Transform</title>
+  <title>CrimAnalyze — UP Police Data Analyst</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
-      <h1>Zero-Shot Agent</h1>
+      <h1>CrimAnalyze</h1>
       <span id="provider-badge" class="badge" title="Active LLM provider">…</span>
     </header>
 
-    <!-- CAPABILITY SLOT — replace this form with your agent's UI -->
-    <section class="card" id="transform-card">
-      <h2>Transform text</h2>
-      <p class="hint">The baseline capability: give it text and an instruction; it applies the
-        instruction with one real LLM call.</p>
+    <section class="card">
+      <h2>Investigative data analyst</h2>
+      <p class="hint">Upload 1–12 CSV files, ask a natural-language question, and get an insight grounded in the data.</p>
 
-      <label for="instruction">Instruction</label>
-      <input id="instruction" type="text"
-             value="Summarize the text in one short paragraph." />
+      <div class="form">
+        <div class="field">
+          <label for="files">Dataset files (CSV)</label>
+          <input id="files" type="file" accept=".csv,text/csv" multiple />
+        </div>
 
-      <label for="text">Text</label>
-      <textarea id="text" rows="8"
-                placeholder="Paste the text to transform…"></textarea>
+        <div class="field">
+          <label for="instruction">Investigator question</label>
+          <input id="instruction" type="text"
+                 value="Summarize the combined data and answer the question." />
+        </div>
+      </div>
 
-      <button id="run-btn">Run</button>
+      <div class="actions">
+        <button id="run-btn">Analyze</button>
+      </div>
 
       <div id="status" class="status" hidden></div>
       <div id="error" class="error" hidden></div>

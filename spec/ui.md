@@ -1,32 +1,41 @@
 # UI
 
-> **Boilerplate status:** Delete this file if the agent has no UI. Otherwise, filled in by the spec-writer sub-agent.
-
----
+> Static server-rendered UI mounted at `/app` in Phase 1. No SPA framework.
 
 ## UI Type
 
-<!-- FILL IN: Web dashboard / CLI / chat interface / none -->
+Static web dashboard (zero-build HTML/CSS/JS from `frontend/public/`).
 
 ## Views / Screens
 
-<!-- FILL IN: One section per major view. -->
+### Screen: Analysis Form
 
-### Screen: <!-- Name -->
-
-**Purpose:** <!-- what the user does here -->
+**Purpose:** Primary user journey. User enters or pastes CSV/JSON and a question; the agent returns insight + chart spec.
 
 **Key elements:**
-- <!-- element 1 -->
-- <!-- element 2 -->
+- Dataset textarea (`#text`)
+- Instruction input (`#instruction`)
+- Run button (`#run-btn`)
+- Status indicator
+- Error panel
+- Result panel with insight text and chart metadata
 
 **Actions available:**
-- <!-- action 1 -->
+- Submit run against the active LLM or see explicit failure when no key is configured
+
+### Screen: Run History
+
+**Purpose:** Show prior runs with run id, provider, model, and status.
+
+**Key elements:**
+- History list pulled from `/runs` semantic surface implemented in Phase 2; in Phase 1 this may be a non-functional labelled stub.
 
 ## Error States
 
-<!-- FILL IN: How does the UI surface errors and loading states to the user? -->
+- No API key: badge shows `no API key — set one in .env`; button remains enabled but run surfaces provider error in the error panel.
+- Run failed: status + `error_message` shown under Error; Result remains hidden.
+- Network/server error: catch block shows backend failure.
 
 ## Tech Stack
 
-<!-- FILL IN: Filled in by spec-writer. E.g., Next.js 15 + React 19 + Tailwind -->
+Plain HTML + CSS + JS from `frontend/public/`, served by FastAPI at `/app`. No npm/bundler in Phase 1. Phase 2 may add Chart.js CDN for chart rendering.

@@ -22,7 +22,7 @@ async def _lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Zero-Shot Agent", version="0.1.0", lifespan=_lifespan)
+    app = FastAPI(title="CrimAnalyze — UP Police Data Analyst", version="0.1.0", lifespan=_lifespan)
 
     from src.api import health, runs
 

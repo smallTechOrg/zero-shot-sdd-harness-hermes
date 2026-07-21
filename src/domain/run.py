@@ -5,9 +5,8 @@ from pydantic import BaseModel, Field
 
 
 class RunRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=100_000)
     instruction: str = Field(
-        default="Summarize the text in one short paragraph.",
+        default="Summarize the data and answer the question.",
         min_length=1,
         max_length=2_000,
     )
@@ -20,3 +19,4 @@ class RunResult(BaseModel):
     provider: str | None = None
     model: str | None = None
     error_message: str | None = None
+    file_count: int = 0
