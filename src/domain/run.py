@@ -5,12 +5,16 @@ from pydantic import BaseModel, Field
 
 
 class RunRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=100_000)
-    instruction: str = Field(
-        default="Summarize the text in one short paragraph.",
-        min_length=1,
-        max_length=2_000,
-    )
+ text: str = Field(..., min_length=1, max_length=100_000)
+ instruction: str = Field(
+ default="Summarize the text in one short paragraph.",
+ min_length=1,
+ max_length=2_000,
+ )
+ data_source: str | None = Field(
+ default=None,
+ pattern="^(transform|csv|live_db|fraud_detection)$",
+ )
 
 
 class RunResult(BaseModel):
