@@ -10,12 +10,10 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Provider defaults used when AGENT_LLM_MODEL / provider-specific model is blank.
-# Verify against current provider docs before pinning — a 404 usually means a stale name.
+# Provider defaults used when AGENT_LLM_MODEL is blank.
 DEFAULT_MODELS = {
  "anthropic": "claude-sonnet-4-6",
  "gemini": "gemini-2.5-flash",
- "openrouter": "tencent/hy3", # cheap default — frontier models 402 on unfunded keys; override via AGENT_LLM_MODEL
  "nim": "meta/llama-3-8b-instruct", # NVIDIA NIM OpenAI-compatible path
 }
 
@@ -37,8 +35,6 @@ class Settings(BaseSettings):
  # --- legacy provider keys (still supported) ---
  anthropic_api_key: str = Field(default="")
  gemini_api_key: str = Field(default="")
- openrouter_api_key: str = Field(default="")
- openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1")
 
  # --- OpenAI-compatible / NIM path ---
  openai_api_key: str = Field(default="")
@@ -47,7 +43,7 @@ class Settings(BaseSettings):
 
  log_level: str = Field(default="INFO")
 
- # --- OpenAI-compatible provider key alias (OpenRouter and NIM both use this auth scheme) ---
+ # --- OpenAI-compatible provider key alias ---
  openai_compat_api_key: str = Field(default="")
 
  # --- CSV / analyst options ---
@@ -58,16 +54,12 @@ class Settings(BaseSettings):
  def resolve_provider(self) -> str:
   if self.llm_provider and self.llm_provider.strip().lower() != "auto":
    p = self.llm_provider.strip().lower()
-   if p in {"anthropic", "gemini", "openrouter", "nim"}:
+   if p in {"anthropic", "gemini", "nim"}:
     return p
   if self.anthropic_api_key.strip():
    return "anthropic"
   if self.gemini_api_key.strip():
    return "gemini"
-  # Dedicated OpenRouter key should resolve to openrouter even when an
-  # OpenAI-compatible base URL is also present.
-  if self.openrouter_api_key.strip():
-   return "openrouter"
   # OpenAI-compatible / NIM path.
   openai_key = (self.openai_api_key or self.openai_compat_api_key or "").strip()
   if openai_key:
@@ -88,11 +80,10 @@ class Settings(BaseSettings):
  def key_for(self, provider: str) -> str:
   p = (provider or "").strip().lower()
   if p == "nim":
-   return (self.openai_api_key or self.openrouter_api_key or self.openai_compat_api_key or "").strip()
+   return (self.openai_api_key or self.openai_compat_api_key or "").strip()
   return {
    "anthropic": self.anthropic_api_key,
    "gemini": self.gemini_api_key,
-   "openrouter": self.openrouter_api_key,
   }.get(p, "").strip()
 
 

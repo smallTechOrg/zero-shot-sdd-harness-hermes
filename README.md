@@ -72,7 +72,7 @@ Three properties make it robust on Hermes:
 
 ```bash
 git clone <this repo> my-agent && cd my-agent
-cp .env.example .env # set at least AGENT_NIM_API_KEY or the OpenRouter key you want to use
+cp .env.example .env # set an NVIDIA NIM key via OPENAI_API_KEY + OPENAI_BASE_URL, or use another OpenAI-compatible key
 ```
 
 Then open a Hermes session anchored to the repo and **just say what you want, in plain
