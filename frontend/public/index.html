@@ -92,6 +92,38 @@
  </div>
  </section>
 
+ <section class="panel hidden" id="panel-fraud" role="tabpanel">
+ <div class="card">
+ <h2>Fraud detection query</h2>
+ <p class="hint">Ask a question over schema metadata to surface repeated patterns, linked entities, or timing anomalies.</p>
+ <form id="fraud-query-form" class="form-row">
+ <textarea id="fraud-question" rows="3" placeholder="e.g. Show repeated complaints with reused IDs across districts."></textarea>
+ <label class="field">
+ <span>Schema summary</span>
+ <textarea id="fraud-schema" rows="4" placeholder="Tables, columns, and IDs relevant to fraud review."></textarea>
+ </label>
+ <button type="submit" id="fraud-query-btn">Analyze fraud signals</button>
+ </form>
+ <div id="fraud-query-status" class="status" hidden></div>
+ <div id="fraud-query-error" class="error" hidden></div>
+
+ <div id="fraud-result-wrap" hidden>
+ <h3>Result</h3>
+ <pre id="fraud-result"></pre>
+ <p class="meta" id="fraud-result-meta"></p>
+ <div id="fraud-table-wrap" class="table-wrap" hidden>
+ <table id="fraud-table">
+ <thead></thead>
+ <tbody></tbody>
+ </table>
+ </div>
+ <div class="actions">
+ <a id="fraud-download" href="#" download>Download CSV</a>
+ </div>
+ </div>
+ </div>
+ </section>
+
  <section class="panel hidden" id="panel-history" role="tabpanel">
  <div class="card">
  <h2>Run history</h2>

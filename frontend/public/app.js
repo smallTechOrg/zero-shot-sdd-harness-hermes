@@ -197,9 +197,46 @@ async function runLiveQuery(question, schemaSummary) {
    renderTable("live-table", "live-table-wrap", data.result_table);
   }
   show(q("live-result-wrap"));
-  } catch (err) {
+ } catch (err) {
   setError(errorEl, err.message);
+ }
+}
+
+async function runFraudQuery(question, schemaSummary) {
+ const statusEl = q("fraud-query-status");
+ const errorEl = q("fraud-query-error");
+ clearStatus(statusEl);
+ clearStatus(errorEl);
+ show(statusEl);
+ setStatus(statusEl, "Running…");
+ try {
+  const res = await fetch("/fraud-detection/query", {
+   method: "POST",
+   headers: { "content-type": "application/json" },
+   body: JSON.stringify({ question, schema_summary: schemaSummary }),
+  });
+  if (!res.ok) {
+   const body = await res.json();
+   throw new Error(body?.detail?.message || `Fraud analysis failed (${res.status})`);
   }
+  const body = await res.json();
+  const data = body.data;
+  if (data.status === "failed") {
+   throw new Error(data.error || "Fraud analysis failed.");
+  }
+  setOk(statusEl, `Done in ${data.latency_ms ?? "?"} ms`);
+  q("fraud-result").textContent = data.answer_text || "";
+  q("fraud-result-meta").textContent = `run ${data.run_id} · ${data.provider || "unknown"} · anomalies: ${(data.anomaly_flags || []).length}`;
+  if (data.run_id) {
+   q("fraud-download").href = `/fraud-detection/runs/${data.run_id}/download`;
+  }
+  if (data.result_table && data.result_table.columns) {
+   renderTable("fraud-table", "fraud-table-wrap", data.result_table);
+  }
+  show(q("fraud-result-wrap"));
+ } catch (err) {
+  setError(errorEl, err.message);
+ }
 }
 
 // Event wiring
