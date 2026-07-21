@@ -86,15 +86,38 @@ Today the same questions — "how many vehicle thefts in Lucknow last month?", "
 
 ### Phase 3 — Polish, Roles, and Production Hardening
 
-- **Goal:** Role enforcement, charting/export richness, saved workspaces, supervisor audit export, and production resilience.
-- **Independent slices:**
-  - `slice-a` (backend) — RBAC middleware, per-query audit export endpoint, chart data API, saved-query / workspace tables.
-  - `slice-b` (frontend) — login-role-aware UI, chart renderer, supervisor audit export panel, saved-workspace manager.
-- **Key surfaces / files:**
-  - Backend: auth guards, PDF/CSV export, additional tests plus load / failure-mode tests.
-  - Frontend: charts, export buttons, saved workspace list.
+- **Goal shipped:** Role enforcement, charting/export richness, saved workspaces, supervisor audit export, and production resilience.
+- **Delivered backend:** RBAC middleware, per-query audit export endpoint, chart data API, saved-query/workspace tables, PDF/CSV export endpoints, auth guards.
+- **Delivered frontend:** React Native charts, export buttons, saved workspace manager, responsive UI tests, role-aware UI.
 - **Gate command:** `uv run pytest tests -q`
 - **How the user tests it (handoff seed):**
-  - Log in as supervisor; export full audit CSV.
-  - Log in as investigator; confirm junior-sensitive warning is shown on flagged queries.
-  - Verify charts render for a time-series question.
+ - Log in as supervisor; export full audit CSV.
+ - Log in as investigator; confirm junior-sensitive warning is shown on flagged queries.
+ - Verify charts render for a time-series question.
+
+### Phase 4 — End-to-End Validation, Common Entry Points, and Docs Reset
+
+- **Goal:** Consolidate user onboarding for the fraud-detection analyst flow and shrink any remaining risk between the server package path and modern Python development.
+- **Independent slices:**
+- `slice-a` (server) — Confirm `python -m src` and source-package imports work without `.venv`-specific assumptions; add a lightweight startup regression test.
+- `slice-b` (engineering) — rip out stale `up_police_data_analyst.py` and other non-essential new root files that duplicate project structure.
+- `slice-c` (user-facing) — restore the standard `README.md` readme and `docs` instructions; do not leave `<COMPLETE_THIS_MANUALLY>` placeholders.
+- `slice-d` (test hygiene) — sweep old session-data or hard-coded temporary folders from `conftest.py`, then re-run the full pytest tree with artefacts cleaned up.
+- **Key surfaces / files:**
+ - Server entrypoint: `src/__main__.py`
+ - Frontend bootstrap: `frontend/public/index.html`, `frontend/public/docs/` if present.
+ - Test config/runtime globals: `tests/conftest.py`
+ - Root-level user guidance: `README.md`, `docs/`
+ - Removed: stray root entrypoint/duplicate stacks (`up_police_data_analyst.py`, if any duplicate).
+- **Priority UX work:**
+- Keep the pre-existing fraud-detection prompt sandbox in `frontend/public/prompt_sandbox.html` **purely HTML/JS, backend-free**.
+- Drop the Python-flavoured ideas such as `README.md <COMPLETE_THIS_MANUALLY>` placeholders and extra root bootstraps.
+- **Verification:**
+ - `uv run pytest tests -q`
+ - `python -m src` starts cleanly in a fresh venv with only `pyproject.toml` dependencies.
+ - Run history, audit export, and live/fraud panels all behave consistently.
+- **Key verification scenarios:**
+ 1. User opens the app and sees all three tabs (CSV, Live DB, Fraud) without Python bootstrapping.
+ 2. User can click **New Query** from history and start a fresh query immediately.
+ 3. Run history page reflects downloads, run statuses, and audit metadata.
+ 4. An auditor can export history/audit data via the **Export history CSV** button.
