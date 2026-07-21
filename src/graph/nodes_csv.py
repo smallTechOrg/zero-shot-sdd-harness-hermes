@@ -36,7 +36,14 @@ def plan_query(state: AgentState) -> AgentState:
    '{"tables": ["upload_1"], "columns": ["col1", "col2"], "notes": "..."}'
   )
   raw = client.complete(system, user, max_tokens=512).strip()
-  plan = json.loads(raw) if raw.startswith("{") else {"tables": [], "columns": [], "notes": raw}
+  plan: dict = {}
+  if raw.startswith("{"):
+   try:
+    plan = json.loads(raw)
+   except Exception:
+    plan = {"notes": raw}
+  else:
+   plan = {"notes": raw}
   state["query_plan"] = raw
   state["tables_touched"] = plan.get("tables") or []
   state["provider"] = client.provider_name

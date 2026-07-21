@@ -1,13 +1,12 @@
-"""Graph nodes — live database analyst path.
+"""Graph nodes — fraud detection analyst path.
 
-Each node reads from and writes to ``AgentState``. Failures go into ``state["error"]``
-so the conditional edge routes to ``handle_failure``.
+Reuses the live-DB execution adapter. Stores anomaly-specific metadata
+so the API response can expose anomaly flags and sensitive warnings.
 """
 from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 
 from src.config.settings import get_settings
 from src.db.live_db import LiveDBQueryError, read_only_query as _read_only_query
@@ -19,7 +18,7 @@ from src.llm.providers.base import LLMError
 def plan_query(state: AgentState) -> AgentState:
  try:
   client = LLMClient()
-  system = load_prompt("live_db_analyst_plan")
+  system = load_prompt("fraud_detection_plan")
   user = (
    f"QUESTION: {state['question']}\n\n"
    f"SCHEMA:\n{state['schema_summary']}\n\n"
@@ -49,7 +48,7 @@ def generate_code(state: AgentState) -> AgentState:
  try:
   plan = state.get("query_plan") or {}
   client = LLMClient()
-  system = load_prompt("live_db_analyst_sql")
+  system = load_prompt("fraud_detection_sql")
   user = (
    f"QUESTION: {state['question']}\n\n"
    f"SCHEMA:\n{state['schema_summary']}\n\n"
@@ -77,7 +76,6 @@ def execute_query(state: AgentState) -> AgentState:
   return {"error": "execute_query: no SQL provided."}
  t0 = time.perf_counter()
  try:
-  wait_for_live_db_ok()
   columns, rows = _read_only_query(sql)
   latency_ms = int((time.perf_counter() - t0) * 1000)
   state["executed_columns"] = columns
@@ -93,7 +91,7 @@ def execute_query(state: AgentState) -> AgentState:
 def assemble_answer(state: AgentState) -> AgentState:
  try:
   client = LLMClient()
-  system = load_prompt("live_db_analyst_answer")
+  system = load_prompt("fraud_detection_answer")
   rows = state.get("executed_rows") or []
   columns = state.get("executed_columns") or []
   user = (
@@ -123,7 +121,7 @@ def assemble_answer(state: AgentState) -> AgentState:
 
 def handle_failure(state: AgentState) -> AgentState:
  state["status"] = "failed"
- state["error"] = state.get("error") or "live_db analyst failed"
+ state["error"] = state.get("error") or "fraud detection analyst failed"
  return state
 
 
@@ -131,9 +129,3 @@ def finalize(state: AgentState) -> AgentState:
  if not state.get("status"):
   state["status"] = "completed"
  return state
-
-
-def wait_for_live_db_ok() -> None:
- url = get_settings().live_db_url
- if not url:
-  raise RuntimeError("Live DB unavailable")
