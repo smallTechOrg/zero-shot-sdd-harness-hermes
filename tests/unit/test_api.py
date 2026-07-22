@@ -47,10 +47,34 @@ def test_run_without_key_fails_gracefully(no_keys):
 
 
 def test_frontend_served_at_app():
-    with _client() as client:
-        res = client.get("/app/")
-        assert res.status_code == 200
-        assert "Zero-Shot Agent" in res.text
-        # styles + js referenced (single-origin)
-        assert "styles.css" in res.text
-        assert "app.js" in res.text
+ with _client() as client:
+  res = client.get("/app/")
+  assert res.status_code == 200
+  # updated branding for Phase 3 analyst UI
+  assert "UP Police Data Analyst" in res.text
+  # styles + js referenced (single-origin)
+  assert "styles.css" in res.text
+  assert "app.js" in res.text
+
+
+def test_list_runs_returns_empty_list_when_no_runs():
+ with _client() as client:
+  res = client.get("/runs")
+  assert res.status_code == 200
+  data = res.json()["data"]
+  assert data == []
+
+
+def test_get_run_history_404_for_missing_run():
+ with _client() as client:
+  res = client.get("/runs/nope")
+  assert res.status_code == 404
+
+
+def test_run_audit_trace_returns_404_for_missing_run():
+ with _client() as client:
+  res = client.get("/runs/nope/audit")
+  assert res.status_code == 404
+  payload = res.json()["detail"]
+  assert isinstance(payload, dict)
+  assert payload.get("code") == "run_not_found"

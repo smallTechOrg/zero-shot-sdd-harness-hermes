@@ -1,48 +1,155 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zero-Shot Agent — Transform</title>
-  <link rel="stylesheet" href="styles.css" />
+ <meta charset="utf-8" />
+ <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+ <title>UP Police Data Analyst</title>
+ <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="shell">
-    <header class="topbar">
-      <h1>Zero-Shot Agent</h1>
-      <span id="provider-badge" class="badge" title="Active LLM provider">…</span>
-    </header>
+ <main class="shell">
+ <header class="topbar">
+ <h1>UP Police Data Analyst</h1>
+ <span id="provider-badge" class="badge" title="Active LLM provider">…</span>
+ </header>
 
-    <!-- CAPABILITY SLOT — replace this form with your agent's UI -->
-    <section class="card" id="transform-card">
-      <h2>Transform text</h2>
-      <p class="hint">The baseline capability: give it text and an instruction; it applies the
-        instruction with one real LLM call.</p>
+ <nav class="tabs" role="tablist">
+ <button class="tab active" data-tab="csv" role="tab" aria-selected="true">Upload + Q&amp;A</button>
+ <button class="tab" data-tab="live" role="tab" aria-selected="false">Live DB</button>
+ <button class="tab" data-tab="fraud" role="tab" aria-selected="false">Fraud detection</button>
+ <button class="tab" data-tab="history" role="tab" aria-selected="false">History</button>
+ </nav>
 
-      <label for="instruction">Instruction</label>
-      <input id="instruction" type="text"
-             value="Summarize the text in one short paragraph." />
+ <section class="panels">
+ <section class="panel" id="panel-csv" role="tabpanel">
+ <div class="card">
+ <h2>Upload CSV</h2>
+ <p class="hint">Upload one CSV export to create an analyst workspace.</p>
+ <form id="csv-upload-form" class="form-row">
+ <input id="csv-file" type="file" accept=".csv" />
+ <button type="submit" id="csv-upload-btn">Upload</button>
+ </form>
+ <div id="csv-upload-status" class="status" hidden></div>
+ <div id="csv-upload-error" class="error" hidden></div>
+ </div>
 
-      <label for="text">Text</label>
-      <textarea id="text" rows="8"
-                placeholder="Paste the text to transform…"></textarea>
+ <div class="card">
+ <h2>Ask a question</h2>
+ <p class="hint">Query the last uploaded CSV workspace.</p>
+ <form id="csv-query-form" class="form-row">
+ <input id="csv-question" type="text" placeholder="e.g. Which district has the highest count?" />
+ <button type="submit" id="csv-query-btn">Ask</button>
+ </form>
+ <div id="csv-query-status" class="status" hidden></div>
+ <div id="csv-query-error" class="error" hidden></div>
 
-      <button id="run-btn">Run</button>
+ <div id="csv-result-wrap" hidden>
+ <h3>Result</h3>
+ <pre id="csv-result"></pre>
+ <p class="meta" id="csv-result-meta"></p>
+ <div id="csv-table-wrap" class="table-wrap" hidden>
+ <table id="csv-table">
+ <thead></thead>
+ <tbody></tbody>
+ </table>
+ </div>
+ <div class="actions">
+ <a id="csv-download" href="#" download>Download CSV</a>
+ </div>
+ </div>
+ </div>
+ </section>
 
-      <div id="status" class="status" hidden></div>
-      <div id="error" class="error" hidden></div>
+ <section class="panel hidden" id="panel-live" role="tabpanel">
+ <div class="card">
+ <h2>Live database query</h2>
+ <p class="hint">Ask a question over the live read-only database schema.</p>
+ <form id="live-query-form" class="form-row">
+ <textarea id="live-question" rows="3" placeholder="e.g. Show the top 10 offences by district this year."></textarea>
+ <label class="field">
+ <span>Schema summary</span>
+ <textarea id="live-schema" rows="4" placeholder="Table -> columns + types"></textarea>
+ </label>
+ <button type="submit" id="live-query-btn">Run live query</button>
+ </form>
+ <div id="live-query-status" class="status" hidden></div>
+ <div id="live-query-error" class="error" hidden></div>
 
-      <div id="result-wrap" hidden>
-        <h3>Result</h3>
-        <pre id="result"></pre>
-        <p class="meta" id="result-meta"></p>
-      </div>
-    </section>
+ <div id="live-result-wrap" hidden>
+ <h3>Result</h3>
+ <pre id="live-result"></pre>
+ <p class="meta" id="live-result-meta"></p>
+ <div id="live-table-wrap" class="table-wrap" hidden>
+ <table id="live-table">
+ <thead></thead>
+ <tbody></tbody>
+ </table>
+ </div>
+ <div class="actions">
+ <a id="live-download" href="#" download>Download CSV</a>
+ </div>
+ </div>
+ </div>
+ </section>
 
-    <footer class="foot">
-      <span>API docs at <a href="/docs">/docs</a> · health at <a href="/health">/health</a></span>
-    </footer>
-  </main>
-  <script src="app.js"></script>
+ <section class="panel hidden" id="panel-fraud" role="tabpanel">
+ <div class="card">
+ <h2>Fraud detection query</h2>
+ <p class="hint">Ask a question over schema metadata to surface repeated patterns, linked entities, or timing anomalies.</p>
+ <form id="fraud-query-form" class="form-row">
+ <textarea id="fraud-question" rows="3" placeholder="e.g. Show repeated complaints with reused IDs across districts."></textarea>
+ <label class="field">
+ <span>Schema summary</span>
+ <textarea id="fraud-schema" rows="4" placeholder="Tables, columns, and IDs relevant to fraud review."></textarea>
+ </label>
+ <button type="submit" id="fraud-query-btn">Analyze fraud signals</button>
+ </form>
+ <div id="fraud-query-status" class="status" hidden></div>
+ <div id="fraud-query-error" class="error" hidden></div>
+
+ <div id="fraud-result-wrap" hidden>
+ <h3>Result</h3>
+ <pre id="fraud-result"></pre>
+ <p class="meta" id="fraud-result-meta"></p>
+ <div id="fraud-table-wrap" class="table-wrap" hidden>
+ <table id="fraud-table">
+ <thead></thead>
+ <tbody></tbody>
+ </table>
+ </div>
+ <div class="actions">
+ <a id="fraud-download" href="#" download>Download CSV</a>
+ </div>
+ </div>
+ </div>
+ </section>
+
+ <section class="panel hidden" id="panel-history" role="tabpanel">
+ <div class="card">
+ <h2>Run history</h2>
+ <button id="refresh-history">Refresh</button>
+ <div id="history-status" class="status" hidden></div>
+ <div id="history-error" class="error" hidden></div>
+ <table id="history-table">
+ <thead>
+ <tr>
+ <th>Run</th>
+ <th>Status</th>
+ <th>Source</th>
+ <th>Time</th>
+ <th>Actions</th>
+ </tr>
+ </thead>
+ <tbody></tbody>
+ </table>
+ </div>
+ </section>
+ </section>
+
+ <footer class="foot">
+ <span>API docs at <a href="/docs">/docs</a> · health at <a href="/health">/health</a></span>
+ </footer>
+ </main>
+ <script src="app.js"></script>
 </body>
 </html>

@@ -15,7 +15,7 @@ Six convictions the whole repo is built around:
 
 1. **Spec is the source of truth.** Written before the code, always. When spec and code disagree, the spec wins and the code is fixed (`/zero-shot-sync`).
 2. **Built for two audiences at once.** A non-coder drives it with a single sentence; a senior engineer inherits a clean FastAPI + LangGraph stack they can read, review, and own.
-3. **Lean harness, not a framework.** `harness/` is engineering *mindfulness* — rules and patterns that keep every session consistent. The product runtime stays provider-agnostic.
+3. **Lean harness, not a framework.** `harness/` is engineering *mindfulness* — rules and patterns that keep every session consistent. The product runtime is **NVIDIA NIM by default** with OpenAI-compatible fallbacks.
 4. **Smallest first-time-right win, phase by phase.** Each phase ships the smallest increment a human can actually test, and it must work the *first* time they test it.
 5. **A human gates every phase.** Autonomous *within* a phase; stops at each boundary for you to test the increment.
 6. **Real LLM/API or it doesn't count.** Gates and tests run against the real model with keys from `.env`. A stubbed pass is not a pass.
@@ -24,9 +24,7 @@ Six convictions the whole repo is built around:
 
 ## What This Is
 
-- A working **baseline agent** in `src/` — FastAPI + LangGraph + SQLite, provider-agnostic
-  LLM (**Anthropic, Gemini, or OpenRouter** — pure httpx, no SDKs), `transform_text` as the
-  capability slot, structured logging, graceful error paths. **Tests pass out of the box.**
+A working **baseline agent** in `src/` — FastAPI + LangGraph + SQLite for CSV mode, read-only MsSQL via SQLAlchemy for live queries, fraud-detection analyst panel, run history + audit export, and a static frontend served by the backend at `/app`.
 - A **zero-build static frontend** in `frontend/public/` served by the backend at `/app` —
   no npm, no bundler, nothing to break at clone time.
 - A **spec template** in `spec/` — roadmap, architecture, capabilities, data, api, ui, and
@@ -74,7 +72,7 @@ Three properties make it robust on Hermes:
 
 ```bash
 git clone <this repo> my-agent && cd my-agent
-cp .env.example .env        # set exactly ONE provider key (Anthropic / Gemini / OpenRouter)
+cp .env.example .env # set an NVIDIA NIM key via OPENAI_API_KEY + OPENAI_BASE_URL, or use another OpenAI-compatible key
 ```
 
 Then open a Hermes session anchored to the repo and **just say what you want, in plain
@@ -106,8 +104,7 @@ skills:
     - /absolute/path/to/this/clone/harness/skills
 ```
 
-*Optional:* `uv sync && uv run python agent.py` runs a doctor over the baseline (deps, `.env`,
-app, unit tests). Not required to build.
+*Optional / preflight:* `uv run pytest tests/unit -q` runs the local sanity checks (no live LLM required). Not required to start the server.
 
 ## What Happens
 
@@ -129,27 +126,27 @@ repeat per phase → final drift audit → SHIP
 
 ---
 
-## Running the Baseline
+## Running the App Now
 
 ```bash
 # all commands run from the repo root
 uv sync
-cp .env.example .env         # set ONE of: AGENT_ANTHROPIC_API_KEY / AGENT_GEMINI_API_KEY / AGENT_OPENROUTER_API_KEY
-uv run python agent.py       # verify setup (doctor)
-uv run python agent.py --run # migrations (if any) + start the server
+cp .env.example .env
+uv run pytest -q
+uv run python -m src
 ```
 
-| URL | What |
+|| URL | What |
 |-----|------|
-| `http://localhost:8001/app/` | **UI** — the transform form (the capability slot) |
+| `http://localhost:8001/app/` | **UI** — CSV upload/Q&A, Live DB, Fraud detection, History |
 | `http://localhost:8001/health` | Health + active provider (never key values) |
 | `http://localhost:8001/docs` | Interactive API docs (Swagger) |
 
 Tests:
 
 ```bash
-uv run pytest tests/unit -q          # no key needed — green on a fresh clone
-uv run pytest tests -q               # + integration against the REAL provider (key in .env)
+uv run pytest tests/unit -q # no key needed
+uv run pytest tests -q # full gate, integration routes need a configured key in .env
 ```
 
 ## Repo Layout
@@ -171,10 +168,13 @@ alembic/            ← migrations, wired (empty until the first schema change)
 .env.example
 ```
 
-**Capability slot** — the three surfaces to replace for your agent:
-- `src/graph/nodes.py` — replace `transform_text` with your logic
-- `src/prompts/transform.md` — replace with your system prompt
-- `frontend/public/` — replace the transform form with your UI
+**Capability slots / entry surfaces**:
+- `src/api/csv.py` — CSV analyst endpoint
+- `src/api/live_db.py` — live read-only database queries
+- `src/api/fraud_detection.py` — fraud-signal analyst over schema metadata
+- `src/api/runs.py` — run history + audit export
+- `src/prompts/` — prompt files per analyst path
+- `frontend/public/` — static UI served at `/app`
 
 Everything else (graph wiring, API, DB, settings, providers, tests) is already working.
 
