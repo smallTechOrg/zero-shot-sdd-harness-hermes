@@ -15,7 +15,7 @@ Six convictions the whole repo is built around:
 
 1. **Spec is the source of truth.** Written before the code, always. When spec and code disagree, the spec wins and the code is fixed (`/zero-shot-sync`).
 2. **Built for two audiences at once.** A non-coder drives it with a single sentence; a senior engineer inherits a clean FastAPI + LangGraph stack they can read, review, and own.
-3. **Lean harness, not a framework.** `harness/` is engineering *mindfulness* — rules and patterns that keep every session consistent. The product runtime stays provider-agnostic.
+3. **Lean harness, not a framework.** `harness/` is engineering *mindfulness* — rules and patterns that keep every session consistent. The product runtime is **NVIDIA NIM by default** with OpenAI-compatible fallbacks.
 4. **Smallest first-time-right win, phase by phase.** Each phase ships the smallest increment a human can actually test, and it must work the *first* time they test it.
 5. **A human gates every phase.** Autonomous *within* a phase; stops at each boundary for you to test the increment.
 6. **Real LLM/API or it doesn't count.** Gates and tests run against the real model with keys from `.env`. A stubbed pass is not a pass.

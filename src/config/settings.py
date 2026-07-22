@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, AliasChoices
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Provider defaults used when AGENT_LLM_MODEL is blank.
@@ -15,15 +15,16 @@ DEFAULT_MODELS = {
  "anthropic": "claude-sonnet-4-6",
  "gemini": "gemini-2.5-flash",
  "nim": "meta/llama-3-8b-instruct", # NVIDIA NIM OpenAI-compatible path
+ "openrouter": "mistralai/mistral-7b-instruct:free", # OpenRouter free tier fallback
 }
 
 
 class Settings(BaseSettings):
  model_config = SettingsConfigDict(
- env_prefix="AGENT_",
- env_file=".env",
- case_sensitive=False,
- extra="ignore",
+  env_prefix="AGENT_",
+  env_file=".env",
+  case_sensitive=False,
+  extra="ignore",
  )
 
  database_url: str = Field(default="sqlite:///./data/app.db")
@@ -36,15 +37,29 @@ class Settings(BaseSettings):
  anthropic_api_key: str = Field(default="")
  gemini_api_key: str = Field(default="")
 
- # --- OpenAI-compatible / NIM path ---
- openai_api_key: str = Field(default="")
- openai_base_url: str = Field(default="https://integrate.api.nvidia.com/v1")
- openai_model: str = Field(default="")
+ # --- OpenAI-compatible / NIM / OpenRouter path ---
+ # Accept both AGENT_OPENAI_API_KEY and OPENAI_API_KEY for compatibility
+ openai_api_key: str = Field(
+  default="",
+  validation_alias=AliasChoices("AGENT_OPENAI_API_KEY", "OPENAI_API_KEY"),
+ )
+ openai_base_url: str = Field(
+  default="https://integrate.api.nvidia.com/v1",
+  validation_alias=AliasChoices("AGENT_OPENAI_BASE_URL", "OPENAI_BASE_URL"),
+ )
+ openai_model: str = Field(
+  default="",
+  validation_alias=AliasChoices("AGENT_OPENAI_MODEL", "OPENAI_MODEL"),
+ )
 
  log_level: str = Field(default="INFO")
 
  # --- OpenAI-compatible provider key alias ---
- openai_compat_api_key: str = Field(default="")
+ # Accept both prefixed and unprefixed env vars for compatibility
+ openai_compat_api_key: str = Field(
+  default="",
+  validation_alias=AliasChoices("AGENT_OPENAI_COMPAT_API_KEY", "OPENAI_COMPAT_API_KEY"),
+ )
 
  # --- CSV / analyst options ---
  analyst_default_row_limit: int = Field(default=100_000)
@@ -52,15 +67,25 @@ class Settings(BaseSettings):
 
  # ----- helpers -----
  def resolve_provider(self) -> str:
+  # explicit override (auto-detection only when provider == "auto")
   if self.llm_provider and self.llm_provider.strip().lower() != "auto":
    p = self.llm_provider.strip().lower()
-   if p in {"anthropic", "gemini", "nim"}:
+   if p in {"anthropic", "gemini", "nim", "openrouter"}:
+    # Verify the matching key is configured before honoring the override
+    if p == "anthropic" and not self.anthropic_api_key.strip():
+     return "stub"
+    if p == "gemini" and not self.gemini_api_key.strip():
+     return "stub"
+    if p == "nim" and not (self.openai_api_key or self.openai_compat_api_key or "").strip():
+     return "stub"
+    if p == "openrouter" and not (self.openai_api_key or self.openai_compat_api_key or "").strip():
+     return "stub"
     return p
+
   if self.anthropic_api_key.strip():
    return "anthropic"
   if self.gemini_api_key.strip():
    return "gemini"
-  # OpenAI-compatible / NIM path.
   openai_key = (self.openai_api_key or self.openai_compat_api_key or "").strip()
   if openai_key:
    base = (self.openai_base_url or "").lower()
@@ -79,7 +104,7 @@ class Settings(BaseSettings):
 
  def key_for(self, provider: str) -> str:
   p = (provider or "").strip().lower()
-  if p == "nim":
+  if p in {"nim", "openrouter"}:
    return (self.openai_api_key or self.openai_compat_api_key or "").strip()
   return {
    "anthropic": self.anthropic_api_key,
