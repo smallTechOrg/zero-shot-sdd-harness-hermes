@@ -1,36 +1,38 @@
-"""Graph nodes — THE CAPABILITY SLOT.
-
-``transform_text`` is the baseline capability: it applies the user's
-instruction to the input text with one batched LLM call. When building your
-agent, replace this node (and src/prompts/transform.md, and the frontend form)
-with your capability — the graph wiring, API, and DB stay as they are.
-
-Node contract: ``(state) -> partial state``; put failures in ``error`` so the
-error edge routes to handle_error — never raise through the graph.
-"""
+"""Graph nodes for Crime Statistics Analysis Agent."""
 from __future__ import annotations
 
+import json
+import pandas as pd
+from typing import Any
+
 from src.graph.state import AgentState
-from src.llm.client import LLMClient, load_prompt
+from src.llm.client import LLMClient
 from src.llm.providers.base import LLMError
 
 
-def transform_text(state: AgentState) -> AgentState:
-    """Apply the instruction to the input text — ONE batched LLM call.
-
-    Never loop an LLM call per output line/token: generate the whole artifact
-    in one call and split downstream if needed (cost blows up otherwise).
-    """
+def parse_intent(state: AgentState) -> AgentState:
+    """LLM interprets the query and generates pandas code to extract insights."""
     try:
         client = LLMClient()
-        system = load_prompt("transform")
-        user = (
-            f"INSTRUCTION:\n{state['instruction']}\n\n"
-            f"TEXT:\n{state['input_text']}"
+        system = (
+            "You are a Python Data Analyst. You have a dictionary of pandas DataFrames called `dfs`.\n"
+            "The keys are the filenames, and the values are the DataFrames.\n"
+            "You must write a valid Python script that analyzes the data to answer the user query.\n"
+            "Assign the final findings (a dictionary, string, or list) to a variable called `result`.\n"
+            "DO NOT wrap your python code in markdown formatting like ```python, just output raw python code."
         )
-        output = client.complete(system, user, max_tokens=2048)
+        user = (
+            f"Query: {state['user_query']}\n"
+            f"Schemas: {json.dumps(state['csv_schemas'], indent=2)}\n"
+        )
+        code = client.complete(system, user, max_tokens=1024).strip()
+        if code.startswith("```python"):
+            code = code[9:]
+        if code.endswith("```"):
+            code = code[:-3]
+            
         return {
-            "output_text": output,
+            "intermediate_results": {"code": code.strip()},
             "provider": client.provider_name,
             "model": client.model,
             "error": None,
@@ -39,9 +41,88 @@ def transform_text(state: AgentState) -> AgentState:
         return {"error": str(exc)}
 
 
+def execute_pandas(state: AgentState) -> AgentState:
+    """Executes the generated pandas code."""
+    if state.get("error"):
+        return state
+    
+    code = state["intermediate_results"]["code"]
+    temp_paths = state["temp_paths"]
+    
+    # Load dataframes
+    dfs = {fname: pd.read_csv(path) for fname, path in temp_paths.items()}
+    
+    local_vars: dict[str, Any] = {"dfs": dfs, "pd": pd, "result": None}
+    
+    try:
+        exec(code, {}, local_vars)
+        result = local_vars.get("result")
+        
+        # Convert non-serializable pandas objects to basic python types
+        if isinstance(result, (pd.DataFrame, pd.Series)):
+            result = result.to_dict()
+            
+        return {
+            "intermediate_results": {"code": code, "data": result},
+            "error": None
+        }
+    except Exception as exc:
+        return {"error": f"Pandas execution failed: {str(exc)}"}
+
+
+def synthesize_dashboard(state: AgentState) -> AgentState:
+    """Takes the raw data and creates a structured dashboard JSON."""
+    if state.get("error"):
+        # Fallback error response
+        return {
+            "final_response": {
+                "summary": "An error occurred during analysis.",
+                "findings": [state["error"]],
+                "charts": [],
+                "recommendations": []
+            }
+        }
+        
+    try:
+        client = LLMClient()
+        system = (
+            "You are a Crime Analyst. Based on the user's query and the data results, "
+            "synthesize a JSON dashboard payload with the following strict structure:\n"
+            "{\n"
+            "  \"summary\": \"Executive summary text\",\n"
+            "  \"findings\": [\"insight 1\", \"insight 2\"],\n"
+            "  \"charts\": [ { \"type\": \"bar\", \"title\": \"...\", \"labels\": [\"A\", \"B\"], \"datasets\": [{ \"label\": \"...\", \"data\": [1, 2] }] } ],\n"
+            "  \"recommendations\": [\"action 1\"]\n"
+            "}\n"
+            "Output RAW JSON ONLY. No markdown."
+        )
+        user = (
+            f"Query: {state['user_query']}\n"
+            f"Data Results: {json.dumps(state['intermediate_results'].get('data', ''))}"
+        )
+        raw_json = client.complete(system, user, max_tokens=2048).strip()
+        if raw_json.startswith("```json"):
+            raw_json = raw_json[7:]
+        if raw_json.endswith("```"):
+            raw_json = raw_json[:-3]
+            
+        payload = json.loads(raw_json)
+        return {
+            "final_response": payload,
+            "status": "completed"
+        }
+    except Exception as exc:
+        return {
+            "final_response": {
+                "summary": "Failed to synthesize JSON dashboard.",
+                "findings": [str(exc)],
+                "charts": [],
+                "recommendations": []
+            }
+        }
+
 def handle_error(state: AgentState) -> AgentState:
     return {"status": "failed"}
-
 
 def finalize(state: AgentState) -> AgentState:
     return {"status": "completed"}
