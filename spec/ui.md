@@ -1,32 +1,18 @@
-# UI
+# UI Spec
 
-> **Boilerplate status:** Delete this file if the agent has no UI. Otherwise, filled in by the spec-writer sub-agent.
+## Theme
+Professional police dashboard: blue/white color scheme, modern cards, and clear typography.
 
----
+## Screens
 
-## UI Type
+1. **Dashboard / Upload View (Initial State)**
+   - Drag-and-drop zone for CSV files.
+   - List of uploaded files showing row counts and parsed columns.
+   - "Analyze Data" section with a text input area for natural language queries.
 
-<!-- FILL IN: Web dashboard / CLI / chat interface / none -->
-
-## Views / Screens
-
-<!-- FILL IN: One section per major view. -->
-
-### Screen: <!-- Name -->
-
-**Purpose:** <!-- what the user does here -->
-
-**Key elements:**
-- <!-- element 1 -->
-- <!-- element 2 -->
-
-**Actions available:**
-- <!-- action 1 -->
-
-## Error States
-
-<!-- FILL IN: How does the UI surface errors and loading states to the user? -->
-
-## Tech Stack
-
-<!-- FILL IN: Filled in by spec-writer. E.g., Next.js 15 + React 19 + Tailwind -->
+2. **Results View (Active State)**
+   - Structured dashboard appears below the query input.
+   - **Executive Summary Card:** High-level AI response.
+   - **Key Findings Card:** Bulleted list of insights.
+   - **Charts Area:** Time-series line chart or bar chart (using a charting library like Chart.js or Recharts).
+   - **Recommendations Card:** Actionable advice based on the data.

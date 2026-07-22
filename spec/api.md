@@ -1,41 +1,48 @@
-# API
+# API Contract
 
-> Fill in this section — see comments below.
-
----
-
-## API Style
-
-<!-- FILL IN: REST / GraphQL / CLI / webhook / none -->
-
-## Endpoints / Commands
-
-<!-- FILL IN: One section per endpoint or command. -->
-
-### `<!-- METHOD /path or command name -->`
-
-**Purpose:** <!-- what this endpoint does -->
-
-**Request:**
-```json
-{
-  "<!-- field -->": "<!-- type and description -->"
-}
-```
-
+## POST /upload
+**Request:** `multipart/form-data` with multiple `file` fields (CSVs).
 **Response:**
 ```json
 {
-  "<!-- field -->": "<!-- type and description -->"
+  "session_id": "uuid",
+  "files_processed": 2,
+  "schemas": {
+    "file1.csv": ["Date", "Crime_Type", "District"],
+    "file2.csv": ["District", "Officer_Count"]
+  }
 }
 ```
 
-**Error cases:**
-| Status | Condition |
-|--------|-----------|
-| 400 | <!-- bad input --> |
-| 500 | <!-- internal error --> |
+## POST /analyze
+**Request:**
+```json
+{
+  "session_id": "uuid",
+  "query": "Which district has the highest crime rate?"
+}
+```
+**Response:**
+```json
+{
+  "summary": "District 9 has the highest crime rate, primarily driven by property crimes.",
+  "findings": ["District 9 accounts for 24% of all incidents.", "Theft is up 12% YoY."],
+  "charts": [
+    {
+      "type": "bar",
+      "title": "Crime by District",
+      "labels": ["Dist 9", "Dist 2"],
+      "datasets": [{"label": "Total Incidents", "data": [1400, 800]}]
+    }
+  ],
+  "recommendations": ["Reallocate patrol units to District 9 between 8 PM and 2 AM."]
+}
+```
 
-## Authentication
-
-<!-- FILL IN: How are API callers authenticated? -->
+## GET /health
+**Response:**
+```json
+{
+  "status": "ok"
+}
+```

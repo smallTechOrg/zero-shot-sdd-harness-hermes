@@ -1,68 +1,34 @@
 # Architecture
 
-> Fill in this section — see comments below.
-
----
-
 ## System Overview
 
-<!-- FILL IN: One paragraph describing the system at a high level. Who/what interacts with it? -->
-
-## Component Map
-
-<!-- FILL IN: List the major components and what each does. -->
-
-```
-[Component A]
-    ↓
-[Component B]   ←→   [External Service]
-    ↓
-[Component C]
-```
-
-## Layers
-
-<!-- FILL IN: Describe the layers of the system (e.g., API → Agent Loop → Tools → Storage). -->
-
-| Layer | Responsibility |
-|-------|----------------|
-| <!-- layer --> | <!-- responsibility --> |
-
-## Data Flow
-
-<!-- FILL IN: Walk through the main data flow from trigger to output. -->
-
-1. Trigger: <!-- how does the agent start? (cron, webhook, user input, etc.) -->
-2. <!-- step 2 -->
-3. <!-- step 3 -->
-4. Output: <!-- what does the agent produce? -->
-
-## External Dependencies
-
-<!-- FILL IN: APIs, services, databases the agent depends on. -->
-
-| Dependency | Purpose | Failure Mode |
-|------------|---------|--------------|
-| <!-- name --> | <!-- what it does --> | <!-- what happens if it's down --> |
+The Crime Statistics Analysis Agent is a full-stack application built around a specialized data-analysis agent graph. 
 
 ## Stack
 
-> This project's concrete technology choices (captured at intake, filled by the spec-writer). The generic, every-project rules — model-naming, DB driver, dev port, test environment — live in `harness/patterns/tech-stack.md`; this section is only what **this** project picked.
+- **Backend:** Python 3.11+, FastAPI (REST endpoints), LangGraph (Agent orchestration).
+- **Frontend:** React via Vite with Vanilla CSS (Professional blue/white police dashboard theme).
+- **Data Processing:** `pandas` for fast in-memory CSV operations (merging, cleaning, aggregating).
+- **Database:** SQLite (local metadata, session, and conversation history storage).
+- **LLM:** Gemini 1.5 (via `google-generativeai` or `langchain-google-genai`).
+- **Observability:** `structlog` for structured request/response logging.
 
-- **Language:** <!-- FILL IN: e.g., Python 3.12 -->
-- **Agent framework:** <!-- FILL IN: e.g., LangGraph / custom / none -->
-- **LLM provider + model:** <!-- FILL IN: e.g., Anthropic / claude-sonnet-4-6 -->
-- **Backend:** <!-- FILL IN: e.g., FastAPI / none -->
-- **Database + ORM:** <!-- FILL IN: e.g., PostgreSQL + SQLAlchemy 2.0 / none -->
-- **Frontend:** <!-- FILL IN: e.g., Next.js / none -->
-- **Dependency management:** <!-- FILL IN: e.g., uv + pyproject.toml -->
+## Components & Data Flow
 
-| Key library | Version | Purpose |
-|-------------|---------|---------|
-| <!-- name --> | <!-- ver --> | <!-- purpose --> |
+1. **Frontend (Vite/React):** 
+   - Provides a drag-and-drop interface for CSV uploads.
+   - Posts files to `/upload` API endpoint.
+   - Provides a chat interface to post user queries to `/analyze` endpoint.
+   - Renders structured dashboards (Executive Summary, Findings, Line/Bar Charts) from the API response.
 
-**Avoid:** <!-- FILL IN: libraries/patterns explicitly off-limits, and why -->
+2. **Backend (FastAPI):**
+   - `/upload` endpoint parses CSVs, stores them temporarily (in-memory or temp disk), and extracts schemas.
+   - `/analyze` endpoint takes a session ID and a user query, invoking the LangGraph agent.
 
-## Deployment Model
+3. **Agent (LangGraph):**
+   - The graph orchestrates the reasoning.
+   - The agent reads the user's query and the data schemas, determines the necessary Pandas aggregations, and generates Python code to query the data.
+   - It executes the Pandas code safely (or uses predefined aggregation tools) and synthesizes the results into a structured JSON dashboard payload.
 
-<!-- FILL IN: How does this run? (local script, cloud function, long-running service, etc.) -->
+4. **Database (SQLite):**
+   - Stores session mappings, conversational history, and pointers to temporary files.
