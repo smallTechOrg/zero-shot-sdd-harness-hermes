@@ -16,6 +16,7 @@ dependencies = [
     "structlog>=24.1",
     "pandas>=3.0.3",
     "python-multipart>=0.0.32",
+    "langgraph-checkpoint-sqlite>=3.1.0",
 ]
 
 [dependency-groups]

@@ -4,6 +4,7 @@ import pandas as pd
 from typing import List
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
+from src.graph.agent import agentic_ai
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -11,9 +12,6 @@ class UploadResponse(BaseModel):
     session_id: str
     files_processed: int
     schemas: dict[str, list[str]]
-
-# In-memory store for Phase 1. (Phase 2 will use SQLite)
-SESSION_FILES = {}
 
 @router.post("", response_model=UploadResponse)
 async def upload_files(files: List[UploadFile] = File(...)):
@@ -44,10 +42,13 @@ async def upload_files(files: List[UploadFile] = File(...)):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to parse CSV {file.filename}: {str(e)}")
             
-    SESSION_FILES[session_id] = {
-        "schemas": schemas,
-        "temp_paths": temp_paths
-    }
+    # Initialize the LangGraph state for this session
+    config = {"configurable": {"thread_id": session_id}}
+    agentic_ai.update_state(config, {
+        "csv_schemas": schemas,
+        "temp_paths": temp_paths,
+        "chat_history": []
+    })
     
     return UploadResponse(
         session_id=session_id,

@@ -7,9 +7,20 @@ interface DashboardProps {
     charts: any[];
     recommendations: string[];
   };
+  isLatest?: boolean;
 }
 
-export default function Dashboard({ data }: DashboardProps) {
+export default function Dashboard({ data, isLatest = true }: DashboardProps) {
+  // If it's not the latest turn, render a compact version to save space
+  if (!isLatest) {
+    return (
+      <div className="dashboard-container compact">
+        <p><strong>Summary:</strong> {data.summary}</p>
+        <p className="hint">See earlier results above. Only the latest dashboard is fully expanded.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard-container">
       <div className="card summary-card">

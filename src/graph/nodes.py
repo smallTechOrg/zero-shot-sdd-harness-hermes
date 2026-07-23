@@ -19,10 +19,14 @@ def parse_intent(state: AgentState) -> AgentState:
             "The keys are the filenames, and the values are the DataFrames.\n"
             "You must write a valid Python script that analyzes the data to answer the user query.\n"
             "Assign the final findings (a dictionary, string, or list) to a variable called `result`.\n"
+            "If the user is asking a follow-up question, use the chat history to understand the context.\n"
             "DO NOT wrap your python code in markdown formatting like ```python, just output raw python code."
         )
+        
+        history_str = json.dumps(state.get("chat_history", [])[-4:], indent=2)
         user = (
-            f"Query: {state['user_query']}\n"
+            f"Chat History Context:\n{history_str}\n\n"
+            f"New Query: {state['user_query']}\n"
             f"Schemas: {json.dumps(state['csv_schemas'], indent=2)}\n"
         )
         code = client.complete(system, user, max_tokens=1024).strip()
@@ -96,7 +100,10 @@ def synthesize_dashboard(state: AgentState) -> AgentState:
             "}\n"
             "Output RAW JSON ONLY. No markdown."
         )
+        
+        history_str = json.dumps(state.get("chat_history", [])[-4:], indent=2)
         user = (
+            f"Chat History Context:\n{history_str}\n\n"
             f"Query: {state['user_query']}\n"
             f"Data Results: {json.dumps(state['intermediate_results'].get('data', ''))}"
         )
@@ -107,8 +114,15 @@ def synthesize_dashboard(state: AgentState) -> AgentState:
             raw_json = raw_json[:-3]
             
         payload = json.loads(raw_json)
+        
+        new_history = [
+            {"role": "user", "content": state["user_query"]},
+            {"role": "assistant", "content": payload["summary"]}
+        ]
+        
         return {
             "final_response": payload,
+            "chat_history": new_history,
             "status": "completed"
         }
     except Exception as exc:
