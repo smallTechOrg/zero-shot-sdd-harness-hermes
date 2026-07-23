@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import './index.css';
 import Upload from './components/Upload';
 import Dashboard from './components/Dashboard';
+import ThemeToggle from './components/ThemeToggle';
 
 interface AnalyzeResponse {
   summary: string;
@@ -67,6 +68,7 @@ function App() {
 
   return (
     <div className="app-container">
+      <ThemeToggle />
       <header className="app-header">
         <h1>Crime Statistics Analysis</h1>
         <p>AI-Powered Detectives Dashboard</p>

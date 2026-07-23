@@ -26,17 +26,32 @@ async def upload_files(files: List[UploadFile] = File(...)):
     temp_dir = os.path.join("data", "temp", session_id)
     os.makedirs(temp_dir, exist_ok=True)
     
+    MAX_SIZE_BYTES = 100 * 1024 * 1024 # 100 MB
+    total_size = 0
+    
     for file in files:
         if not file.filename.endswith(".csv"):
             raise HTTPException(status_code=400, detail=f"File {file.filename} is not a CSV")
             
-        file_path = os.path.join(temp_dir, file.filename)
         content = await file.read()
+        total_size += len(content)
+        if total_size > MAX_SIZE_BYTES:
+            raise HTTPException(status_code=413, detail="Total file size exceeds 100MB limit.")
+            
+        file_path = os.path.join(temp_dir, file.filename)
         with open(file_path, "wb") as f:
             f.write(content)
             
         try:
-            df = pd.read_csv(file_path)
+            # Fallback encoding to handle malicious/weird CSVs
+            try:
+                df = pd.read_csv(file_path, encoding="utf-8")
+            except UnicodeDecodeError:
+                df = pd.read_csv(file_path, encoding="latin1")
+                
+            if df.empty or len(df.columns) == 0:
+                raise ValueError("CSV is empty or has no columns")
+                
             schemas[file.filename] = list(df.columns)
             temp_paths[file.filename] = file_path
         except Exception as e:
