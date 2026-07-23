@@ -29,6 +29,11 @@ function App() {
     setTurns([]);
   };
 
+  const handleExit = () => {
+    setSessionId(null);
+    setTurns([]);
+  };
+
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -70,8 +75,17 @@ function App() {
     <div className="app-container">
       <ThemeToggle />
       <header className="app-header">
-        <h1>Crime Statistics Analysis</h1>
-        <p>AI-Powered Detectives Dashboard</p>
+        <div className="header-content">
+          <div>
+            <h1>Crime Statistics Analysis</h1>
+            <p>AI-Powered Detectives Dashboard</p>
+          </div>
+          {sessionId && (
+            <button className="exit-btn" onClick={handleExit}>
+              Exit Session
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="app-main">
@@ -130,7 +144,7 @@ function App() {
                   }}
                 />
                 <button type="submit" disabled={turns.some(t => t.loading)}>
-                  Analyze
+                  {turns.some(t => t.loading) ? 'Analyzing...' : 'Analyze'}
                 </button>
               </form>
             </div>

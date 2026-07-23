@@ -30,9 +30,10 @@ body {
 }
 
 .app-container {
-  max-width: 1200px;
+  width: 100%;
+  max-width: 120rem;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 2vh 2vw;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -40,8 +41,24 @@ body {
 }
 
 .app-header {
-  text-align: center;
   margin-bottom: 1rem;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.exit-btn {
+  background-color: var(--error);
+  width: auto;
+  margin-top: 0;
+}
+.exit-btn:hover {
+  background-color: #b91c1c;
 }
 
 .app-header h1 {
@@ -179,6 +196,7 @@ button:disabled {
   background-color: var(--bg-chat-user);
   padding: 1rem;
   border-radius: 8px;
+  width: fit-content;
   max-width: 80%;
 }
 
@@ -277,7 +295,13 @@ button:disabled {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 1.5rem;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
   gap: 1.5rem;
 }
 

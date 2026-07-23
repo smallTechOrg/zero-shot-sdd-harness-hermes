@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import ast
 import pandas as pd
 from typing import Any
 
@@ -20,23 +21,45 @@ def parse_intent(state: AgentState) -> AgentState:
             "You must write a valid Python script that analyzes the data to answer the user query.\n"
             "Assign the final findings (a dictionary, string, or list) to a variable called `result`.\n"
             "If the user is asking a follow-up question, use the chat history to understand the context.\n"
+            "Generate ONLY valid, syntactically correct Python. Properly escape all quotes and string literals regardless of the input language (e.g. Hindi, Hinglish).\n"
+            "Never leave a string unterminated.\n"
             "DO NOT wrap your python code in markdown formatting like ```python, just output raw python code."
         )
         
         history_str = json.dumps(state.get("chat_history", [])[-4:], indent=2)
-        user = (
+        user_prompt = (
             f"Chat History Context:\n{history_str}\n\n"
             f"New Query: {state['user_query']}\n"
             f"Schemas: {json.dumps(state['csv_schemas'], indent=2)}\n"
         )
-        code = client.complete(system, user, max_tokens=1024).strip()
-        if code.startswith("```python"):
-            code = code[9:]
-        if code.endswith("```"):
-            code = code[:-3]
+        
+        code = ""
+        syntax_error = None
+        for attempt in range(2):
+            if attempt == 1:
+                user_prompt += f"\nYour previous code had this syntax error: {syntax_error}. Fix it."
+                
+            code = client.complete(system, user_prompt, max_tokens=1024).strip()
+            if code.startswith("```python"):
+                code = code[9:]
+            if code.startswith("```"):
+                code = code[3:]
+            if code.endswith("```"):
+                code = code[:-3]
+            code = code.strip()
+            
+            try:
+                ast.parse(code)
+                syntax_error = None
+                break
+            except SyntaxError as e:
+                syntax_error = str(e)
+                
+        if syntax_error:
+            return {"error": "I encountered an error generating the data analysis code. Please rephrase your query."}
             
         return {
-            "intermediate_results": {"code": code.strip()},
+            "intermediate_results": {"code": code},
             "provider": client.provider_name,
             "model": client.model,
             "error": None,
@@ -98,6 +121,8 @@ def synthesize_dashboard(state: AgentState) -> AgentState:
             "  \"charts\": [ { \"type\": \"bar\", \"title\": \"...\", \"labels\": [\"A\", \"B\"], \"datasets\": [{ \"label\": \"...\", \"data\": [1, 2] }] } ],\n"
             "  \"recommendations\": [\"action 1\"]\n"
             "}\n"
+            "Identify the language of the user's query (e.g., Hindi, Hinglish, English). "
+            "You MUST generate the summary, findings, and recommendations in that exact same language.\n"
             "Output RAW JSON ONLY. No markdown."
         )
         
