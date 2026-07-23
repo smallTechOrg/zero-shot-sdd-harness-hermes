@@ -26,7 +26,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
     temp_dir = os.path.join("data", "temp", session_id)
     os.makedirs(temp_dir, exist_ok=True)
     
-    MAX_SIZE_BYTES = 100 * 1024 * 1024 # 100 MB
+    MAX_SIZE_BYTES = 4.5 * 1024 * 1024 # 4.5 MB (Vercel limit)
     total_size = 0
     
     for file in files:
@@ -36,7 +36,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
         content = await file.read()
         total_size += len(content)
         if total_size > MAX_SIZE_BYTES:
-            raise HTTPException(status_code=413, detail="Total file size exceeds 100MB limit.")
+            raise HTTPException(status_code=413, detail="Total file size exceeds the 4.5MB Vercel serverless payload limit.")
             
         file_path = os.path.join(temp_dir, file.filename)
         with open(file_path, "wb") as f:

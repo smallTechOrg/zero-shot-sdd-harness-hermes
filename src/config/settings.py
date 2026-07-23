@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # provider docs before pinning — a 404 from the LLM API usually means a stale name.
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-3.5-flash",
     "openrouter": "tencent/hy3",  # cheap default ($0.14/M in) — frontier models 402 on unfunded keys; override via AGENT_LLM_MODEL
 }
 

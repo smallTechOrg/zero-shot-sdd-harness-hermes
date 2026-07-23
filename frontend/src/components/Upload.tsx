@@ -9,7 +9,7 @@ export default function Upload({ onUploadComplete }: { onUploadComplete: (id: st
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles(Array.from(e.target.files));
+      validateAndSetFiles(Array.from(e.target.files));
     }
   };
 
@@ -17,7 +17,18 @@ export default function Upload({ onUploadComplete }: { onUploadComplete: (id: st
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files) {
-      setFiles(Array.from(e.dataTransfer.files));
+      validateAndSetFiles(Array.from(e.dataTransfer.files));
+    }
+  };
+
+  const validateAndSetFiles = (newFiles: File[]) => {
+    const totalSize = newFiles.reduce((acc, file) => acc + file.size, 0);
+    if (totalSize > 4.5 * 1024 * 1024) {
+      setError("Total file size exceeds the 4.5MB Vercel serverless payload limit. Please upload smaller CSVs.");
+      setFiles([]);
+    } else {
+      setError(null);
+      setFiles(newFiles);
     }
   };
 
