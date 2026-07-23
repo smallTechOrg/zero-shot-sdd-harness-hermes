@@ -26,9 +26,12 @@ def create_app() -> FastAPI:
 
     from src.api import health, upload, analyze
 
-    app.include_router(health.router)
-    app.include_router(upload.router)
-    app.include_router(analyze.router)
+    from fastapi import APIRouter
+    api_router = APIRouter(prefix="/api")
+    api_router.include_router(health.router)
+    api_router.include_router(upload.router)
+    api_router.include_router(analyze.router)
+    app.include_router(api_router)
 
     if _FRONTEND_DIR.is_dir():
         app.mount("/app", StaticFiles(directory=_FRONTEND_DIR, html=True), name="frontend")

@@ -9,7 +9,7 @@ def _client() -> TestClient:
 
 def test_health_reports_provider_presence_only(no_keys):
     with _client() as client:
-        res = client.get("/health")
+        res = client.get("/api/health")
         assert res.status_code == 200
         data = res.json()["data"]
         assert data["status"] == "ok"
