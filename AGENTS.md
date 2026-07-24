@@ -81,9 +81,11 @@ process; never improvise one):
 - **sync** — reconcile spec ↔ code (spec wins) → `harness/skills/zero-shot-sync/SKILL.md`
 
 The outcome is always one of these three — nothing built yet ⇒ default to **build**;
-genuinely ambiguous ⇒ ask one short clarifying question first. (`.hermes.md` holds the
-authoritative router. The `/zero-shot-*` slash commands are optional and require registering
-this clone via `skills.external_dirs`.)
+genuinely ambiguous ⇒ ask one short clarifying question first. **A build-shaped message IS
+the argument: start intake in that same turn — never ask the user to re-submit the idea or
+invoke the skill themselves** (`disable-model-invocation` means only you can start it).
+(`.hermes.md` holds the authoritative router. The `/zero-shot-*` slash commands are optional
+and require registering this clone via `skills.external_dirs`.)
 
 | Skill | Purpose |
 |-------|---------|
